@@ -1,0 +1,40 @@
+<div id="nq-carousel-{{ block.id }}" style="width:100%;overflow-x:auto;display:flex;gap:12px;padding:16px;"></div>
+
+<script>
+(function() {
+  var shop = "{{ shop.permanent_domain }}";
+  var API = "https://queuniverse-shoppable.vercel.app/api/videos";
+
+  fetch(API + "?shop=" + shop + "&page=home")
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var videos = data.videos || [];
+      if (!videos.length) return;
+
+      var container = document.getElementById("nq-carousel-{{ block.id }}");
+
+      videos.forEach(function(video) {
+        var wrap = document.createElement("div");
+        wrap.style.cssText = "min-width:280px;border-radius:12px;overflow:hidden;background:#000;flex-shrink:0;";
+
+        var vid = document.createElement("video");
+        vid.src = video.r2_url;
+        vid.controls = true;
+        vid.muted = true;
+        vid.playsInline = true;
+        vid.style.cssText = "width:100%;height:400px;object-fit:cover;display:block;";
+
+        wrap.appendChild(vid);
+        container.appendChild(wrap);
+      });
+    });
+})();
+</script>
+
+{% schema %}
+{
+  "name": "NQ Video Carousel",
+  "target": "section",
+  "settings": []
+}
+{% endschema %}
