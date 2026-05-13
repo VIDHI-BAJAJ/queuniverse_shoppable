@@ -1,12 +1,10 @@
-import { useState } from "react";
 import { Form, useActionData, useNavigation, Link } from "react-router";
-
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 
-const s3 = new S3Client({
+const getS3 = () => new S3Client({
   region: "auto",
   endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   credentials: {
@@ -22,9 +20,7 @@ export const action = async ({ request }) => {
   const sourceUrl = formData.get("source_url");
   const title = formData.get("title");
 
-  if (!sourceUrl) {
-    return json({ error: "Please provide a video URL" });
-  }
+  if (!sourceUrl) return { error: "Please provide a video URL" };
 
   try {
     const response = await fetch(sourceUrl);
@@ -33,7 +29,7 @@ export const action = async ({ request }) => {
     const buffer = await response.arrayBuffer();
     const key = `videos/${uuidv4()}.mp4`;
 
-    await s3.send(new PutObjectCommand({
+    await getS3().send(new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: key,
       Body: Buffer.from(buffer),
@@ -56,9 +52,9 @@ export const action = async ({ request }) => {
 
     if (error) throw error;
 
-    return redirect(`/app/videos/${data.id}`);
+    return Response.redirect(`/app/videos/${data.id}`, 302);
   } catch (err) {
-    return json({ error: err.message });
+    return { error: err.message };
   }
 };
 
@@ -80,9 +76,7 @@ export default function NewVideo() {
 
       <Form method="post" style={{ marginTop: "20px" }}>
         <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px" }}>
-            Video Title
-          </label>
+          <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px" }}>Video Title</label>
           <input
             name="title"
             type="text"
@@ -92,9 +86,7 @@ export default function NewVideo() {
         </div>
 
         <div style={{ marginBottom: "16px" }}>
-          <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px" }}>
-            Video URL (MP4 direct link)
-          </label>
+          <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px" }}>Video URL (MP4 direct link)</label>
           <input
             name="source_url"
             type="url"
@@ -102,9 +94,7 @@ export default function NewVideo() {
             required
             style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "16px" }}
           />
-          <p style={{ fontSize: "12px", color: "#666", marginTop: "4px" }}>
-            Paste a direct MP4 URL.
-          </p>
+          <p style={{ fontSize: "12px", color: "#666", marginTop: "4px" }}>Paste a direct MP4 URL.</p>
         </div>
 
         <button
