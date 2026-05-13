@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Form, useActionData, useNavigation, Link } from "@remix-run/react";
-import { json, redirect } from "@remix-run/node";
+import { Form, useActionData, useNavigation, Link } from "react-router";
+import { json, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -27,14 +27,12 @@ export const action = async ({ request }) => {
   }
 
   try {
-    // Fetch the video
     const response = await fetch(sourceUrl);
     if (!response.ok) throw new Error("Failed to fetch video");
 
     const buffer = await response.arrayBuffer();
     const key = `videos/${uuidv4()}.mp4`;
 
-    // Upload to R2
     await s3.send(new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: key,
@@ -44,7 +42,6 @@ export const action = async ({ request }) => {
 
     const r2Url = `${process.env.R2_PUBLIC_URL}/${key}`;
 
-    // Save to Supabase
     const { data, error } = await supabase.from("videos").insert({
       shop_id: shop,
       title: title || "Untitled Video",
@@ -82,3 +79,42 @@ export default function NewVideo() {
       )}
 
       <Form method="post" style={{ marginTop: "20px" }}>
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px" }}>
+            Video Title
+          </label>
+          <input
+            name="title"
+            type="text"
+            placeholder="e.g. Summer Collection Reel"
+            style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "16px" }}
+          />
+        </div>
+
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px" }}>
+            Video URL (MP4 direct link)
+          </label>
+          <input
+            name="source_url"
+            type="url"
+            placeholder="https://example.com/video.mp4"
+            required
+            style={{ width: "100%", padding: "10px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "16px" }}
+          />
+          <p style={{ fontSize: "12px", color: "#666", marginTop: "4px" }}>
+            Paste a direct MP4 URL.
+          </p>
+        </div>
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          style={{ padding: "12px 24px", background: isLoading ? "#ccc" : "#008060", color: "white", border: "none", borderRadius: "6px", cursor: isLoading ? "not-allowed" : "pointer", fontSize: "16px" }}
+        >
+          {isLoading ? "Uploading to R2..." : "Import Video"}
+        </button>
+      </Form>
+    </div>
+  );
+}
