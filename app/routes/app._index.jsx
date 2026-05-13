@@ -1,5 +1,5 @@
 import { useLoaderData, Link } from "react-router";
-import { json } from "react-router";
+
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Form, useActionData, useNavigation, Link } from "react-router";
-import { json, redirect } from "react-router";
+
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";

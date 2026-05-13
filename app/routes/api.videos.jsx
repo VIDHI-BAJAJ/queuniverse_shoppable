@@ -1,4 +1,4 @@
-import { json } from "react-router";
+
 import { supabase } from "../supabase.server";
 
 export const loader = async ({ request }) => {
