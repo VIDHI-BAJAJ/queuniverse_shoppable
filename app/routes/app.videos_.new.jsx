@@ -1,4 +1,5 @@
-import { Form, useActionData, useNavigation, Link } from "react-router";
+import { Form, useActionData, useNavigation, Link, useNavigate } from "react-router";
+import { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -52,7 +53,7 @@ export const action = async ({ request }) => {
 
     if (error) throw error;
 
-    return Response.redirect(`/app/videos/${data.id}`, 302);
+    return { success: true, videoId: data.id };
   } catch (err) {
     return { error: err.message };
   }
@@ -61,7 +62,14 @@ export const action = async ({ request }) => {
 export default function NewVideo() {
   const actionData = useActionData();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const isLoading = navigation.state === "submitting";
+
+  useEffect(() => {
+    if (actionData?.success && actionData?.videoId) {
+      navigate(`/app/videos/${actionData.videoId}`);
+    }
+  }, [actionData]);
 
   return (
     <div style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "600px" }}>
