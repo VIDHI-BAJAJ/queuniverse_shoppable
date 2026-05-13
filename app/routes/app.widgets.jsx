@@ -1,5 +1,4 @@
 import { useLoaderData, Form } from "react-router";
-
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
 
@@ -7,13 +6,17 @@ export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const { data: settings } = await supabase
-    .from("settings")
-    .select("*")
-    .eq("shop_id", shop)
-    .single();
+  try {
+    const { data: settings } = await supabase
+      .from("settings")
+      .select("*")
+      .eq("shop_id", shop)
+      .single();
 
-  return json({ settings: settings || { autoplay: false, layout: "carousel", accent_color: "#008060" } });
+    return { settings: settings || { autoplay: false, layout: "carousel", accent_color: "#008060" } };
+  } catch (e) {
+    return { settings: { autoplay: false, layout: "carousel", accent_color: "#008060" } };
+  }
 };
 
 export const action = async ({ request }) => {
@@ -30,7 +33,7 @@ export const action = async ({ request }) => {
 
   await supabase.from("settings").upsert(settings, { onConflict: "shop_id" });
 
-  return json({ ok: true });
+  return { ok: true };
 };
 
 export default function Widgets() {
@@ -40,14 +43,10 @@ export default function Widgets() {
     <div style={{ padding: "20px", fontFamily: "sans-serif", maxWidth: "500px" }}>
       <h1>Widget Settings</h1>
       <Form method="post" style={{ marginTop: "20px" }}>
-
         <div style={{ marginBottom: "16px" }}>
           <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px" }}>Layout</label>
-          <select
-            name="layout"
-            defaultValue={settings.layout}
-            style={{ padding: "10px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "16px", width: "100%" }}
-          >
+          <select name="layout" defaultValue={settings.layout}
+            style={{ padding: "10px", border: "1px solid #ddd", borderRadius: "6px", fontSize: "16px", width: "100%" }}>
             <option value="carousel">Carousel</option>
             <option value="grid">Grid</option>
           </select>
@@ -55,29 +54,19 @@ export default function Widgets() {
 
         <div style={{ marginBottom: "16px" }}>
           <label style={{ display: "block", fontWeight: "bold", marginBottom: "6px" }}>Accent Color</label>
-          <input
-            name="accent_color"
-            type="color"
-            defaultValue={settings.accent_color}
-            style={{ padding: "4px", border: "1px solid #ddd", borderRadius: "6px", height: "40px", width: "80px" }}
-          />
+          <input name="accent_color" type="color" defaultValue={settings.accent_color}
+            style={{ padding: "4px", border: "1px solid #ddd", borderRadius: "6px", height: "40px", width: "80px" }} />
         </div>
 
         <div style={{ marginBottom: "20px" }}>
           <label style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: "bold" }}>
-            <input
-              type="checkbox"
-              name="autoplay"
-              defaultChecked={settings.autoplay}
-            />
+            <input type="checkbox" name="autoplay" defaultChecked={settings.autoplay} />
             Autoplay videos
           </label>
         </div>
 
-        <button
-          type="submit"
-          style={{ padding: "12px 24px", background: "#008060", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "16px" }}
-        >
+        <button type="submit"
+          style={{ padding: "12px 24px", background: "#008060", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "16px" }}>
           Save Settings
         </button>
       </Form>
