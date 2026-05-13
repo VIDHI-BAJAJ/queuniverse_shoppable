@@ -23,7 +23,7 @@ export const loader = async ({ request }) => {
       .eq("status", "live");
 
     if (page === "home") {
-      query = query.contains("show_on", ["home"]);
+     query = query.contains("show_on", JSON.stringify(["home"]));
     } else if (page === "pdp" && productId) {
       query = query.contains("product_ids", [productId]);
     }
