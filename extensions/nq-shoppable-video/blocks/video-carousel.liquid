@@ -1,33 +1,170 @@
-<div id="nq-carousel-{{ block.id }}" style="width:100%;overflow-x:auto;display:flex;gap:12px;padding:16px;"></div>
+{{ 'nq-carousel.css' | asset_url | stylesheet_tag }}
+
+<div class="nq-section">
+  <h2 class="nq-heading">{{ block.settings.heading }}</h2>
+  <div class="nq-carousel" id="nq-carousel-{{ block.id }}">
+    <div class="nq-loading">Loading videos...</div>
+  </div>
+</div>
+
+<!-- Fullscreen Popup -->
+<div class="nq-popup" id="nq-popup-{{ block.id }}">
+  <div class="nq-popup-overlay" onclick="nqClosePopup('{{ block.id }}')"></div>
+  <div class="nq-popup-content">
+    <button class="nq-popup-close" onclick="nqClosePopup('{{ block.id }}')">✕</button>
+    <button class="nq-popup-prev" onclick="nqPrevVideo('{{ block.id }}')">❮</button>
+    <button class="nq-popup-next" onclick="nqNextVideo('{{ block.id }}')">❯</button>
+    <div class="nq-popup-video-wrap">
+      <video class="nq-popup-video" id="nq-popup-video-{{ block.id }}" autoplay muted playsinline controls></video>
+      <div class="nq-popup-product" id="nq-popup-product-{{ block.id }}"></div>
+    </div>
+  </div>
+</div>
 
 <script>
 (function() {
   var shop = "{{ shop.permanent_domain }}";
   var API = "https://queuniverse-shoppable.vercel.app/api/videos";
+  var blockId = "{{ block.id }}";
+  var allVideos = [];
+  var currentIndex = 0;
 
   fetch(API + "?shop=" + shop + "&page=home")
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      var videos = data.videos || [];
-      if (!videos.length) return;
+      allVideos = data.videos || [];
+      var container = document.getElementById("nq-carousel-" + blockId);
+      container.innerHTML = "";
 
-      var container = document.getElementById("nq-carousel-{{ block.id }}");
+      if (!allVideos.length) {
+        container.innerHTML = "<p style='padding:20px;color:#999;'>No videos yet.</p>";
+        return;
+      }
 
-      videos.forEach(function(video) {
-        var wrap = document.createElement("div");
-        wrap.style.cssText = "min-width:280px;border-radius:12px;overflow:hidden;background:#000;flex-shrink:0;";
+      allVideos.forEach(function(video, index) {
+        var card = document.createElement("div");
+        card.className = "nq-card";
+        card.onclick = function() { nqOpenPopup(blockId, index); };
 
-        var vid = document.createElement("video");
-        vid.src = video.r2_url;
-        vid.controls = true;
-        vid.muted = true;
-        vid.playsInline = true;
-        vid.style.cssText = "width:100%;height:400px;object-fit:cover;display:block;";
+        var videoEl = document.createElement("video");
+        videoEl.src = video.r2_url;
+        videoEl.muted = true;
+        videoEl.loop = true;
+        videoEl.playsInline = true;
+        videoEl.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:12px;";
 
-        wrap.appendChild(vid);
-        container.appendChild(wrap);
+        // Autoplay on hover
+        card.onmouseenter = function() { videoEl.play(); };
+        card.onmouseleave = function() { videoEl.pause(); videoEl.currentTime = 0; };
+
+        var views = document.createElement("div");
+        views.className = "nq-views";
+        views.innerHTML = "&#128065; " + (video.views || 0);
+
+        var playIcon = document.createElement("div");
+        playIcon.className = "nq-play-icon";
+        playIcon.innerHTML = "&#9654;";
+
+        card.appendChild(videoEl);
+        card.appendChild(views);
+        card.appendChild(playIcon);
+
+        // Product info below card
+        if (video.product_ids && video.product_ids.length > 0) {
+          fetchProduct(video.product_ids[0]).then(function(product) {
+            if (!product) return;
+            var info = document.createElement("div");
+            info.className = "nq-product-info";
+            info.innerHTML = '<p class="nq-product-title">' + product.title + '</p>' +
+              '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
+            card.appendChild(info);
+          });
+        }
+
+        container.appendChild(card);
       });
+
+      // Scroll buttons
+      var prevBtn = document.createElement("button");
+      prevBtn.className = "nq-scroll-btn nq-scroll-prev";
+      prevBtn.innerHTML = "&#10094;";
+      prevBtn.onclick = function() { container.scrollBy({ left: -300, behavior: "smooth" }); };
+
+      var nextBtn = document.createElement("button");
+      nextBtn.className = "nq-scroll-btn nq-scroll-next";
+      nextBtn.innerHTML = "&#10095;";
+      nextBtn.onclick = function() { container.scrollBy({ left: 300, behavior: "smooth" }); };
+
+      container.parentElement.appendChild(prevBtn);
+      container.parentElement.appendChild(nextBtn);
     });
+
+  function fetchProduct(productId) {
+    var numericId = productId.replace("gid://shopify/Product/", "");
+    return fetch("/products.json?ids=" + numericId)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        return data.products && data.products[0] ? data.products[0].variants[0] ? {
+          title: data.products[0].title,
+          price: data.products[0].variants[0].price * 100,
+          handle: data.products[0].handle,
+          image: data.products[0].images[0] ? data.products[0].images[0].src : null
+        } : null : null;
+      }).catch(function() { return null; });
+  }
+
+  window.nqOpenPopup = function(bid, index) {
+    if (bid !== blockId) return;
+    currentIndex = index;
+    nqShowPopupVideo(bid);
+    document.getElementById("nq-popup-" + bid).classList.add("active");
+    document.body.style.overflow = "hidden";
+  };
+
+  window.nqClosePopup = function(bid) {
+    if (bid !== blockId) return;
+    var popup = document.getElementById("nq-popup-" + bid);
+    popup.classList.remove("active");
+    document.getElementById("nq-popup-video-" + bid).pause();
+    document.body.style.overflow = "";
+  };
+
+  window.nqPrevVideo = function(bid) {
+    if (bid !== blockId) return;
+    currentIndex = (currentIndex - 1 + allVideos.length) % allVideos.length;
+    nqShowPopupVideo(bid);
+  };
+
+  window.nqNextVideo = function(bid) {
+    if (bid !== blockId) return;
+    currentIndex = (currentIndex + 1) % allVideos.length;
+    nqShowPopupVideo(bid);
+  };
+
+  function nqShowPopupVideo(bid) {
+    var video = allVideos[currentIndex];
+    var videoEl = document.getElementById("nq-popup-video-" + bid);
+    videoEl.src = video.r2_url;
+    videoEl.play();
+
+    var productDiv = document.getElementById("nq-popup-product-" + bid);
+    productDiv.innerHTML = "";
+
+    if (video.product_ids && video.product_ids.length > 0) {
+      fetchProduct(video.product_ids[0]).then(function(product) {
+        if (!product) return;
+        productDiv.innerHTML =
+          '<div class="nq-popup-product-card">' +
+          (product.image ? '<img src="' + product.image + '" alt="' + product.title + '">' : '') +
+          '<div class="nq-popup-product-info">' +
+          '<p class="nq-popup-product-title">' + product.title + '</p>' +
+          '<p class="nq-popup-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
+          '</div>' +
+          '<a href="/products/' + product.handle + '" class="nq-shop-now">SHOP NOW</a>' +
+          '</div>';
+      });
+    }
+  }
 })();
 </script>
 
@@ -35,6 +172,13 @@
 {
   "name": "NQ Video Carousel",
   "target": "section",
-  "settings": []
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Watch And Buy"
+    }
+  ]
 }
 {% endschema %}
