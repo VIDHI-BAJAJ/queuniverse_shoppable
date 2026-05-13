@@ -1,6 +1,7 @@
 (function () {
-  // Always use the myshopify domain
-  const shop = window.Shopify?.shop;
+  console.log("NQ Widget loaded, shop:", window.NQ_SHOP || window.Shopify?.shop);
+  
+  const shop = window.NQ_SHOP || window.Shopify?.shop;
   if (!shop) return;
 
   const API = "https://queuniverse-shoppable.vercel.app/api/videos";
