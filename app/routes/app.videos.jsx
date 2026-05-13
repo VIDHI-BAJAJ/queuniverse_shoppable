@@ -1,5 +1,4 @@
-import { useLoaderData, Link } from "react-router";
-
+import { useLoaderData, Link, Form } from "react-router";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
 
@@ -7,13 +6,17 @@ export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const { data: videos } = await supabase
-    .from("videos")
-    .select("*")
-    .eq("shop_id", shop)
-    .order("created_at", { ascending: false });
+  try {
+    const { data: videos } = await supabase
+      .from("videos")
+      .select("*")
+      .eq("shop_id", shop)
+      .order("created_at", { ascending: false });
 
-  return json({ videos: videos || [] });
+    return { videos: videos || [] };
+  } catch (e) {
+    return { videos: [] };
+  }
 };
 
 export const action = async ({ request }) => {
@@ -21,23 +24,21 @@ export const action = async ({ request }) => {
   const shop = session.shop;
   const formData = await request.formData();
   const id = formData.get("id");
-  const action = formData.get("action");
+  const actionType = formData.get("action");
 
-  if (action === "delete") {
-    await supabase.from("videos").delete().eq("id", id).eq("shop_id", shop);
-  }
+  try {
+    if (actionType === "delete") {
+      await supabase.from("videos").delete().eq("id", id).eq("shop_id", shop);
+    }
+    if (actionType === "toggle") {
+      const { data } = await supabase
+        .from("videos").select("status").eq("id", id).single();
+      const newStatus = data.status === "live" ? "draft" : "live";
+      await supabase.from("videos").update({ status: newStatus }).eq("id", id);
+    }
+  } catch (e) {}
 
-  if (action === "toggle") {
-    const { data } = await supabase
-      .from("videos")
-      .select("status")
-      .eq("id", id)
-      .single();
-    const newStatus = data.status === "live" ? "draft" : "live";
-    await supabase.from("videos").update({ status: newStatus }).eq("id", id);
-  }
-
-  return json({ ok: true });
+  return { ok: true };
 };
 
 export default function Videos() {
@@ -84,20 +85,20 @@ export default function Videos() {
                       Edit
                     </button>
                   </Link>
-                  <form method="post">
+                  <Form method="post" style={{ display: "inline" }}>
                     <input type="hidden" name="id" value={video.id} />
                     <input type="hidden" name="action" value="toggle" />
                     <button type="submit" style={{ padding: "6px 12px", background: "#5c6ac4", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}>
                       {video.status === "live" ? "Draft" : "Live"}
                     </button>
-                  </form>
-                  <form method="post">
+                  </Form>
+                  <Form method="post" style={{ display: "inline" }}>
                     <input type="hidden" name="id" value={video.id} />
                     <input type="hidden" name="action" value="delete" />
                     <button type="submit" style={{ padding: "6px 12px", background: "#de3618", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}>
                       Delete
                     </button>
-                  </form>
+                  </Form>
                 </div>
               </div>
             </div>
