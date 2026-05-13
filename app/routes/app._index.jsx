@@ -1,5 +1,4 @@
 import { useLoaderData, Link } from "react-router";
-
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
 
@@ -7,16 +6,20 @@ export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const { data: videos } = await supabase
-    .from("videos")
-    .select("id, status, views")
-    .eq("shop_id", shop);
+  try {
+    const { data: videos } = await supabase
+      .from("videos")
+      .select("id, status, views")
+      .eq("shop_id", shop);
 
-  const total = videos?.length || 0;
-  const live = videos?.filter(v => v.status === "live").length || 0;
-  const totalViews = videos?.reduce((sum, v) => sum + (v.views || 0), 0) || 0;
+    const total = videos?.length || 0;
+    const live = videos?.filter(v => v.status === "live").length || 0;
+    const totalViews = videos?.reduce((sum, v) => sum + (v.views || 0), 0) || 0;
 
-  return json({ total, live, totalViews });
+    return { total, live, totalViews };
+  } catch (e) {
+    return { total: 0, live: 0, totalViews: 0 };
+  }
 };
 
 export default function Index() {
