@@ -83,36 +83,21 @@
   var currentIndex = 0;
   var active3D = 0;
 
-  // Show skeleton cards immediately while API loads
-  var container = document.getElementById("nq-carousel-" + blockId);
-  if (container) {
-    container.innerHTML = "";
-    for (var s = 0; s < 5; s++) {
-      var sk = document.createElement("div");
-      sk.className = "nq-skeleton";
-      sk.style.cssText = "width:" + cardW + "px;height:" + cardH + "px;flex-shrink:0;";
-      container.appendChild(sk);
-    }
-  }
-
-  /* ── CACHE + FETCH STRATEGY ───────────────────────────────────
-     • localStorage (24h): serves instantly on page load
-     • sessionStorage: fallback for private browsing
-     • Vercel warm-ping fired immediately to kill cold start
-     • Fetch with 3 retries; renders as soon as data arrives
-  ──────────────────────────────────────────────────────────── */
-
+  /* ── CACHE & FETCH ─────────────────────────────────────────────
+     1. Read localStorage (24h TTL) → render instantly if found
+     2. Always fetch fresh from API → update cache + allVideos
+     3. Retry up to 3x on failure, show refresh link if all fail
+  ─────────────────────────────────────────────────────────────*/
   var CACHE_KEY = "nq_v3_" + shop;
-  var CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in ms
-  var fetchDone = false;
+  var rendered  = false;
 
-  // ── Read from localStorage (survives page refresh) ──────────
   function readCache() {
     try {
       var raw = localStorage.getItem(CACHE_KEY);
       if (!raw) return null;
       var obj = JSON.parse(raw);
-      if (Date.now() - obj.ts > CACHE_TTL) { localStorage.removeItem(CACHE_KEY); return null; }
+      // Expire after 24h
+      if (Date.now() - obj.ts > 86400000) { localStorage.removeItem(CACHE_KEY); return null; }
       return obj.data;
     } catch(e) { return null; }
   }
@@ -121,24 +106,18 @@
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
   }
 
-  // ── Render videos ───────────────────────────────────────────
-  function processVideos(data) {
-    if (fetchDone) return; // prevent double-render
-    fetchDone = true;
+  function renderVideos(data) {
     allVideos = (data && data.videos) ? data.videos : [];
+    console.log("[NQ " + blockId + "] Rendering", allVideos.length, "videos");
     var cont = document.getElementById("nq-carousel-" + blockId);
-    if (!cont) return;
+    if (!cont) { console.log("[NQ] Container not found!"); return; }
     cont.innerHTML = "";
-
     if (!allVideos.length) {
-      cont.innerHTML = "<p class='nq-empty'>No videos yet.</p>";
+      cont.innerHTML = "<p class='nq-empty'>No videos found.</p>";
       return;
     }
-
-    // Paint first 3 cards right away
+    rendered = true;
     allVideos.slice(0, 3).forEach(function(v, i) { cont.appendChild(buildCard(v, i)); });
-
-    // Paint rest on next animation frame so first 3 appear instantly
     if (allVideos.length > 3) {
       requestAnimationFrame(function() {
         allVideos.slice(3).forEach(function(v, i) { cont.appendChild(buildCard(v, i + 3)); });
@@ -150,53 +129,57 @@
   }
 
   function finishSetup(cont) {
-    if (tileType === "feed_on_scroll")    initScrollReveal(cont);
+    if (tileType === "feed_on_scroll")     initScrollReveal(cont);
     else if (tileType === "3d_navigation") init3D();
     else                                   initScrollBtns();
   }
 
-  // ── Serve from cache instantly ───────────────────────────────
+  // Step 1: instant render from cache
   var cached = readCache();
   if (cached) {
-    processVideos(cached);
+    console.log("[NQ " + blockId + "] Cache HIT");
+    renderVideos(cached);
+  } else {
+    console.log("[NQ " + blockId + "] Cache MISS — fetching API");
   }
 
-  // ── Background fetch — always refresh cache ──────────────────
-  // Reset fetchDone so background fetch can still update allVideos
-  if (cached) fetchDone = false;
-
-  var apiURL = API + "?shop=" + shop + "&page=home";
-
-  // Timeout: show retry link after 12s if nothing loaded
-  var giveUpTimer = setTimeout(function() {
-    if (!allVideos.length) {
+  // Step 2: fetch fresh data
+  var apiURL  = API + "?shop=" + shop + "&page=home";
+  var giveUp  = setTimeout(function() {
+    if (!rendered) {
       var cont = document.getElementById("nq-carousel-" + blockId);
-      if (cont) cont.innerHTML = "<p class='nq-empty'>Taking too long — <a href='javascript:location.reload()' style='color:#333;text-decoration:underline'>tap to retry</a></p>";
+      if (cont) cont.innerHTML = "<p class='nq-empty' style='padding:20px'>Slow connection — <a href='javascript:location.reload()' style='color:#333;text-decoration:underline'>tap to refresh</a></p>";
     }
-  }, 12000);
+  }, 15000);
 
-  // Fetch with up to 3 automatic retries
-  function doFetch(attempts) {
+  function doFetch(tries) {
+    console.log("[NQ " + blockId + "] Fetch, tries left:", tries, "URL:", apiURL);
     fetch(apiURL)
       .then(function(r) {
-        if (!r.ok) throw new Error(r.status);
+        console.log("[NQ] Response:", r.status);
+        if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
       })
       .then(function(data) {
-        clearTimeout(giveUpTimer);
-        writeCache(data); // always update cache with fresh data
-        if (!cached) {
-          // First visit — render now
-          processVideos(data);
+        clearTimeout(giveUp);
+        console.log("[NQ] Videos from API:", data && data.videos ? data.videos.length : 0);
+        writeCache(data);
+        if (!rendered) {
+          renderVideos(data);
         } else {
-          // Repeat visit — silently update allVideos for popup navigation
           allVideos = data.videos || [];
         }
       })
       .catch(function(err) {
-        if (attempts > 1) {
-          // Retry after 2.5s
-          setTimeout(function() { doFetch(attempts - 1); }, 2500);
+        console.log("[NQ] Fetch error:", String(err), "tries left:", tries - 1);
+        if (tries > 1) {
+          setTimeout(function() { doFetch(tries - 1); }, 3000);
+        } else {
+          clearTimeout(giveUp);
+          if (!rendered) {
+            var cont = document.getElementById("nq-carousel-" + blockId);
+            if (cont) cont.innerHTML = "<p class='nq-empty' style='padding:20px'>Could not load — <a href='javascript:location.reload()' style='color:#333;text-decoration:underline'>tap to refresh</a></p>";
+          }
         }
       });
   }
