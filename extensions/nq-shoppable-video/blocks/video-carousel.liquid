@@ -24,8 +24,10 @@
 
   {% else %}
     <div class="nq-carousel-wrap">
-      <div class="nq-carousel" id="nq-carousel-{{ block.id }}">
-        <div class="nq-loading">Loading videos...</div>
+  <div class="nq-carousel" id="nq-carousel-{{ block.id }}">
+        {%- for i in (1..5) -%}
+          <div class="nq-skeleton" style="width:{{ block.settings.card_width }}px;height:{{ block.settings.card_height }}px;flex-shrink:0;"></div>
+        {%- endfor -%}
       </div>
       <button class="nq-scroll-btn nq-scroll-prev" id="nq-prev-{{ block.id }}">&#10094;</button>
       <button class="nq-scroll-btn nq-scroll-next" id="nq-next-{{ block.id }}">&#10095;</button>

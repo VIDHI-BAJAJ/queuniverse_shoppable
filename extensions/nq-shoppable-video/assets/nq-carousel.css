@@ -33,10 +33,15 @@
 .nq-skeleton {
   border-radius: 12px;
   flex-shrink: 0;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: linear-gradient(90deg, #efefef 25%, #e2e2e2 50%, #efefef 75%);
   background-size: 200% 100%;
-  animation: nq-shimmer 1.4s infinite;
+  animation: nq-shimmer 1.2s ease-in-out infinite;
+  /* Ensure skeleton never blocks the real cards */
+  pointer-events: none;
 }
+
+/* Remove the old .nq-loading text style */
+.nq-loading { display: none; }
 
 @keyframes nq-shimmer {
   0%   { background-position: 200% 0; }
