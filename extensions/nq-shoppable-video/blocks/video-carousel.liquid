@@ -76,67 +76,64 @@
         // ── Tile-type specific product rendering ──────────────────────────
         if (tileType === "img_transparent_text_overlay_3" ||
             tileType === "img_transparent_text_overlay_2") {
-          // Transparent text overlay
+          // Transparent overlay: product thumbnail + title inside video bottom
           if (video.product_ids && video.product_ids.length > 0) {
             fetchProduct(video.product_ids[0]).then(function(product) {
               if (!product) return;
               var overlay = document.createElement("div");
               overlay.className = "nq-overlay nq-overlay-transparent";
               overlay.innerHTML =
-                '<p class="nq-overlay-title">' + product.title + '</p>' +
-                '<p class="nq-overlay-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
-                '<a href="/products/' + product.handle + '" class="nq-shop-now" style="background:' + shopBtnColor + '">SHOP NOW</a>';
+                (product.image ? '<img src="' + product.image + '" alt="' + product.title + '">' : '') +
+                '<p class="nq-overlay-title">' + product.title + '</p>';
               card.appendChild(overlay);
             });
           }
 
         } else if (tileType === "img_opaque_text_overlay_3") {
-          // Opaque text overlay
+          // Opaque white card below video: product thumbnail + title + price
           if (video.product_ids && video.product_ids.length > 0) {
             fetchProduct(video.product_ids[0]).then(function(product) {
               if (!product) return;
               var overlay = document.createElement("div");
               overlay.className = "nq-overlay nq-overlay-opaque";
               overlay.innerHTML =
+                (product.image ? '<img src="' + product.image + '" alt="' + product.title + '">' : '') +
+                '<div>' +
                 '<p class="nq-overlay-title">' + product.title + '</p>' +
                 '<p class="nq-overlay-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
-                '<a href="/products/' + product.handle + '" class="nq-shop-now" style="background:' + shopBtnColor + '">SHOP NOW</a>';
+                '</div>';
               card.appendChild(overlay);
             });
           }
 
         } else if (tileType === "single_tile_no_overlay") {
-          // No overlay – card only, no extra product info
+          // No overlay – card only, no product info
 
         } else if (tileType === "product_below_3" || tileType === "product_below_2" || tileType === "product_below") {
-          // Product info below card (default)
+          // Product info below card: title + price + discount badge
           if (video.product_ids && video.product_ids.length > 0) {
             fetchProduct(video.product_ids[0]).then(function(product) {
               if (!product) return;
+              var priceNum = parseInt(product.price) / 100;
+              var comparePriceNum = product.compare_at_price ? parseInt(product.compare_at_price) / 100 : null;
+              var discountHtml = '';
+              if (comparePriceNum && comparePriceNum > priceNum) {
+                var pct = Math.round((comparePriceNum - priceNum) / comparePriceNum * 100);
+                discountHtml =
+                  '<span class="nq-product-original-price">₹' + comparePriceNum.toLocaleString('en-IN') + '</span>' +
+                  '<span class="nq-discount-badge">' + pct + '% off</span>';
+              }
               var info = document.createElement("div");
               info.className = "nq-product-info";
               info.innerHTML =
                 '<p class="nq-product-title">' + product.title + '</p>' +
-                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
+                '<p class="nq-product-price">₹' + priceNum.toLocaleString('en-IN') + ' ' + discountHtml + '</p>';
               card.appendChild(info);
             });
           }
 
         } else if (tileType === "story_format") {
-          // Story-like format: full-width tall card with bottom overlay
-          card.classList.add("nq-story");
-          if (video.product_ids && video.product_ids.length > 0) {
-            fetchProduct(video.product_ids[0]).then(function(product) {
-              if (!product) return;
-              var overlay = document.createElement("div");
-              overlay.className = "nq-overlay nq-overlay-story";
-              overlay.innerHTML =
-                '<p class="nq-overlay-title">' + product.title + '</p>' +
-                '<p class="nq-overlay-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
-                '<a href="/products/' + product.handle + '" class="nq-shop-now" style="background:' + shopBtnColor + '">SHOP NOW</a>';
-              card.appendChild(overlay);
-            });
-          }
+          // Story: circular card — no product info shown on card itself
 
         } else if (tileType === "feed_view_more") {
           // Feed with "View More" CTA
@@ -259,6 +256,7 @@
         return data.products && data.products[0] ? data.products[0].variants[0] ? {
           title: data.products[0].title,
           price: data.products[0].variants[0].price * 100,
+          compare_at_price: data.products[0].variants[0].compare_at_price ? data.products[0].variants[0].compare_at_price * 100 : null,
           handle: data.products[0].handle,
           image: data.products[0].images[0] ? data.products[0].images[0].src : null
         } : null : null;
