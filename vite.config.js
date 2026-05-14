@@ -37,9 +37,12 @@ if (host === "localhost") {
 
 export default defineConfig({
   server: {
-    allowedHosts: [host],
+    // Allow all hosts so Shopify storefront can call /api/videos
+    // Previously set to [host] which blocked external requests
+    allowedHosts: true,
     cors: {
       preflightContinue: true,
+      origin: "*",
     },
     port: Number(process.env.PORT || 3000),
     hmr: hmrConfig,
