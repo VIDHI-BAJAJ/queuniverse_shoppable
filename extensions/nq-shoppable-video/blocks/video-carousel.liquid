@@ -28,6 +28,8 @@
   var shop = "{{ shop.permanent_domain }}";
   var API = "https://queuniverse-shoppable.vercel.app/api/videos";
   var blockId = "{{ block.id }}";
+  var tileType = "{{ block.settings.tile_type }}";
+  var shopBtnColor = "{{ block.settings.shop_btn_color }}";
   var allVideos = [];
   var currentIndex = 0;
 
@@ -45,7 +47,7 @@
 
       allVideos.forEach(function(video, index) {
         var card = document.createElement("div");
-        card.className = "nq-card";
+        card.className = "nq-card nq-tile-" + tileType;
         card.onclick = function() { nqOpenPopup(blockId, index); };
 
         var videoEl = document.createElement("video");
@@ -71,17 +73,165 @@
         card.appendChild(views);
         card.appendChild(playIcon);
 
-        // Product info below card
-        if (video.product_ids && video.product_ids.length > 0) {
-          fetchProduct(video.product_ids[0]).then(function(product) {
-            if (!product) return;
-            var info = document.createElement("div");
-            info.className = "nq-product-info";
-            info.innerHTML = '<p class="nq-product-title">' + product.title + '</p>' +
-              '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
-            card.appendChild(info);
-          });
+        // ── Tile-type specific product rendering ──────────────────────────
+        if (tileType === "img_transparent_text_overlay_3" ||
+            tileType === "img_transparent_text_overlay_2") {
+          // Transparent text overlay
+          if (video.product_ids && video.product_ids.length > 0) {
+            fetchProduct(video.product_ids[0]).then(function(product) {
+              if (!product) return;
+              var overlay = document.createElement("div");
+              overlay.className = "nq-overlay nq-overlay-transparent";
+              overlay.innerHTML =
+                '<p class="nq-overlay-title">' + product.title + '</p>' +
+                '<p class="nq-overlay-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
+                '<a href="/products/' + product.handle + '" class="nq-shop-now" style="background:' + shopBtnColor + '">SHOP NOW</a>';
+              card.appendChild(overlay);
+            });
+          }
+
+        } else if (tileType === "img_opaque_text_overlay_3") {
+          // Opaque text overlay
+          if (video.product_ids && video.product_ids.length > 0) {
+            fetchProduct(video.product_ids[0]).then(function(product) {
+              if (!product) return;
+              var overlay = document.createElement("div");
+              overlay.className = "nq-overlay nq-overlay-opaque";
+              overlay.innerHTML =
+                '<p class="nq-overlay-title">' + product.title + '</p>' +
+                '<p class="nq-overlay-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
+                '<a href="/products/' + product.handle + '" class="nq-shop-now" style="background:' + shopBtnColor + '">SHOP NOW</a>';
+              card.appendChild(overlay);
+            });
+          }
+
+        } else if (tileType === "single_tile_no_overlay") {
+          // No overlay – card only, no extra product info
+
+        } else if (tileType === "product_below_3" || tileType === "product_below_2" || tileType === "product_below") {
+          // Product info below card (default)
+          if (video.product_ids && video.product_ids.length > 0) {
+            fetchProduct(video.product_ids[0]).then(function(product) {
+              if (!product) return;
+              var info = document.createElement("div");
+              info.className = "nq-product-info";
+              info.innerHTML =
+                '<p class="nq-product-title">' + product.title + '</p>' +
+                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
+              card.appendChild(info);
+            });
+          }
+
+        } else if (tileType === "story_format") {
+          // Story-like format: full-width tall card with bottom overlay
+          card.classList.add("nq-story");
+          if (video.product_ids && video.product_ids.length > 0) {
+            fetchProduct(video.product_ids[0]).then(function(product) {
+              if (!product) return;
+              var overlay = document.createElement("div");
+              overlay.className = "nq-overlay nq-overlay-story";
+              overlay.innerHTML =
+                '<p class="nq-overlay-title">' + product.title + '</p>' +
+                '<p class="nq-overlay-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
+                '<a href="/products/' + product.handle + '" class="nq-shop-now" style="background:' + shopBtnColor + '">SHOP NOW</a>';
+              card.appendChild(overlay);
+            });
+          }
+
+        } else if (tileType === "feed_view_more") {
+          // Feed with "View More" CTA
+          if (video.product_ids && video.product_ids.length > 0) {
+            fetchProduct(video.product_ids[0]).then(function(product) {
+              if (!product) return;
+              var info = document.createElement("div");
+              info.className = "nq-product-info";
+              info.innerHTML =
+                '<p class="nq-product-title">' + product.title + '</p>' +
+                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
+                '<a href="/products/' + product.handle + '" class="nq-view-more">View More ›</a>';
+              card.appendChild(info);
+            });
+          }
+
+        } else if (tileType === "feed_on_scroll") {
+          // Feed on scroll – lazy load style, product info below
+          card.classList.add("nq-feed-scroll");
+          if (video.product_ids && video.product_ids.length > 0) {
+            fetchProduct(video.product_ids[0]).then(function(product) {
+              if (!product) return;
+              var info = document.createElement("div");
+              info.className = "nq-product-info";
+              info.innerHTML =
+                '<p class="nq-product-title">' + product.title + '</p>' +
+                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
+              card.appendChild(info);
+            });
+          }
+
+        } else if (tileType === "grid_theme_border") {
+          // Grid with themed border
+          card.classList.add("nq-grid-border");
+          if (video.product_ids && video.product_ids.length > 0) {
+            fetchProduct(video.product_ids[0]).then(function(product) {
+              if (!product) return;
+              var info = document.createElement("div");
+              info.className = "nq-product-info";
+              info.innerHTML =
+                '<p class="nq-product-title">' + product.title + '</p>' +
+                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
+              card.appendChild(info);
+            });
+          }
+
+        } else if (tileType === "grid_no_border") {
+          // Grid without border
+          card.classList.add("nq-grid-no-border");
+          if (video.product_ids && video.product_ids.length > 0) {
+            fetchProduct(video.product_ids[0]).then(function(product) {
+              if (!product) return;
+              var info = document.createElement("div");
+              info.className = "nq-product-info";
+              info.innerHTML =
+                '<p class="nq-product-title">' + product.title + '</p>' +
+                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
+              card.appendChild(info);
+            });
+          }
+
+        } else if (tileType === "3d_navigation") {
+          // 3D navigation carousel card
+          card.classList.add("nq-3d");
+          if (video.product_ids && video.product_ids.length > 0) {
+            fetchProduct(video.product_ids[0]).then(function(product) {
+              if (!product) return;
+              var overlay = document.createElement("div");
+              overlay.className = "nq-overlay nq-overlay-transparent";
+              overlay.innerHTML =
+                '<p class="nq-overlay-title">' + product.title + '</p>' +
+                '<p class="nq-overlay-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
+                '<a href="/products/' + product.handle + '" class="nq-shop-now" style="background:' + shopBtnColor + '">SHOP NOW</a>';
+              card.appendChild(overlay);
+            });
+          }
+
+        } else if (tileType === "minimal") {
+          // Minimal – video card only, no product details
+
+        } else {
+          // Fallback: product info below
+          if (video.product_ids && video.product_ids.length > 0) {
+            fetchProduct(video.product_ids[0]).then(function(product) {
+              if (!product) return;
+              var info = document.createElement("div");
+              info.className = "nq-product-info";
+              info.innerHTML =
+                '<p class="nq-product-title">' + product.title + '</p>' +
+                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
+              card.appendChild(info);
+            });
+          }
         }
+        // ──────────────────────────────────────────────────────────────────
 
         container.appendChild(card);
       });
@@ -162,7 +312,7 @@
           '<p class="nq-popup-product-title">' + product.title + '</p>' +
           '<p class="nq-popup-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
           '</div>' +
-          '<a href="/products/' + product.handle + '" class="nq-shop-now">SHOP NOW</a>' +
+          '<a href="/products/' + product.handle + '" class="nq-shop-now" style="background:' + shopBtnColor + '">SHOP NOW</a>' +
           '</div>';
       });
     }
@@ -239,12 +389,23 @@
       "type": "select",
       "id": "tile_type",
       "label": "Tile Type",
+      "info": "'2 tiles' and '3 tiles' refer to the layout in mobile view",
       "options": [
-        { "value": "product_below", "label": "Video Card - Product Info Below" },
-        { "value": "overlay", "label": "Video Card - Text Overlay" },
-        { "value": "minimal", "label": "Video Card - Minimal" }
+        { "value": "img_transparent_text_overlay_3", "label": "Video Card-Img & Transparent Text Overlay-3 tiles" },
+        { "value": "img_transparent_text_overlay_2", "label": "Video Card-Img & Transparent Text Overlay-2 tiles" },
+        { "value": "img_opaque_text_overlay_3",      "label": "Video Card-Img & Opaque Text Overlay-3 tiles" },
+        { "value": "single_tile_no_overlay",          "label": "Video Card-Single Tile (No Overlay)" },
+        { "value": "product_below_3",                 "label": "Video Card-Product Info Below tile-3 tiles" },
+        { "value": "product_below_2",                 "label": "Video Card-Product Info Below tile-2 tiles" },
+        { "value": "story_format",                    "label": "Video Card-Story Like Format" },
+        { "value": "feed_view_more",                  "label": "Video Card Feed-View More" },
+        { "value": "feed_on_scroll",                  "label": "Video Card Feed-On Scroll" },
+        { "value": "grid_theme_border",               "label": "Video Card Grid-Theme Border" },
+        { "value": "grid_no_border",                  "label": "Video Card Grid-No Border" },
+        { "value": "3d_navigation",                   "label": "Video Card 3D Navigation" },
+        { "value": "minimal",                         "label": "Video Card Minimal" }
       ],
-      "default": "product_below"
+      "default": "product_below_3"
     },
     {
       "type": "color",
