@@ -1,4 +1,6 @@
 {{ 'nq-carousel.css' | asset_url | stylesheet_tag }}
+<link rel="preconnect" href="https://queuniverse-shoppable.vercel.app" crossorigin>
+<link rel="dns-prefetch" href="https://queuniverse-shoppable.vercel.app">
 
 <div class="nq-section nq-tile-type-{{ block.settings.tile_type }}"
      style="padding: {{ block.settings.vertical_padding }}px {{ block.settings.horizontal_padding }}px;">
@@ -93,12 +95,37 @@
     }
   }
 
-  // Use sessionStorage cache so re-visits are instant
-  var cacheKey = "nq_videos_" + shop;
-  var cached   = sessionStorage ? sessionStorage.getItem(cacheKey) : null;
+  /* ── CACHE + FETCH STRATEGY ───────────────────────────────────
+     • localStorage (24h): serves instantly on page load
+     • sessionStorage: fallback for private browsing
+     • Vercel warm-ping fired immediately to kill cold start
+     • Fetch with 3 retries; renders as soon as data arrives
+  ──────────────────────────────────────────────────────────── */
 
+  var CACHE_KEY = "nq_v3_" + shop;
+  var CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in ms
+  var fetchDone = false;
+
+  // ── Read from localStorage (survives page refresh) ──────────
+  function readCache() {
+    try {
+      var raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      var obj = JSON.parse(raw);
+      if (Date.now() - obj.ts > CACHE_TTL) { localStorage.removeItem(CACHE_KEY); return null; }
+      return obj.data;
+    } catch(e) { return null; }
+  }
+
+  function writeCache(data) {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
+  }
+
+  // ── Render videos ───────────────────────────────────────────
   function processVideos(data) {
-    allVideos = data.videos || [];
+    if (fetchDone) return; // prevent double-render
+    fetchDone = true;
+    allVideos = (data && data.videos) ? data.videos : [];
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (!cont) return;
     cont.innerHTML = "";
@@ -108,64 +135,73 @@
       return;
     }
 
-    // Render first 3 cards immediately, rest deferred
-    var firstBatch = allVideos.slice(0, 3);
-    var restBatch  = allVideos.slice(3);
+    // Paint first 3 cards right away
+    allVideos.slice(0, 3).forEach(function(v, i) { cont.appendChild(buildCard(v, i)); });
 
-    firstBatch.forEach(function(video, index) {
-      cont.appendChild(buildCard(video, index));
-    });
-
-    // Defer remaining cards so browser paints first 3 fast
-    if (restBatch.length) {
-      setTimeout(function() {
-        restBatch.forEach(function(video, index) {
-          cont.appendChild(buildCard(video, index + 3));
-        });
-        if (tileType === "feed_on_scroll") {
-          initScrollReveal(cont);
-        } else if (tileType === "3d_navigation") {
-          init3D();
-        } else {
-          initScrollBtns();
-        }
-      }, 60);
+    // Paint rest on next animation frame so first 3 appear instantly
+    if (allVideos.length > 3) {
+      requestAnimationFrame(function() {
+        allVideos.slice(3).forEach(function(v, i) { cont.appendChild(buildCard(v, i + 3)); });
+        finishSetup(cont);
+      });
     } else {
-      if (tileType === "feed_on_scroll") {
-        initScrollReveal(cont);
-      } else if (tileType === "3d_navigation") {
-        init3D();
-      } else {
-        initScrollBtns();
-      }
+      finishSetup(cont);
     }
   }
 
+  function finishSetup(cont) {
+    if (tileType === "feed_on_scroll")    initScrollReveal(cont);
+    else if (tileType === "3d_navigation") init3D();
+    else                                   initScrollBtns();
+  }
+
+  // ── Serve from cache instantly ───────────────────────────────
+  var cached = readCache();
   if (cached) {
-    try { processVideos(JSON.parse(cached)); } catch(e) {}
+    processVideos(cached);
   }
 
-  // Always fetch fresh — updates cache for next visit
-  var controller = window.AbortController ? new AbortController() : null;
-  var fetchOpts  = controller ? { signal: controller.signal } : {};
-  var timer = setTimeout(function() {
-    if (controller) controller.abort();
-    if (!allVideos.length && container) {
-      container.innerHTML = "<p class='nq-empty'>Could not load videos. Please refresh.</p>";
-    }
-  }, 8000); // 8s hard timeout
+  // ── Background fetch — always refresh cache ──────────────────
+  // Reset fetchDone so background fetch can still update allVideos
+  if (cached) fetchDone = false;
 
-  fetch(API + "?shop=" + shop + "&page=home", fetchOpts)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      clearTimeout(timer);
-      // Save to cache
-      if (sessionStorage) {
-        try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch(e) {}
-      }
-      // Only re-render if we didn't already render from cache
-      if (!cached) { processVideos(data); } else { allVideos = data.videos || []; }
-    });
+  var apiURL = API + "?shop=" + shop + "&page=home";
+
+  // Timeout: show retry link after 12s if nothing loaded
+  var giveUpTimer = setTimeout(function() {
+    if (!allVideos.length) {
+      var cont = document.getElementById("nq-carousel-" + blockId);
+      if (cont) cont.innerHTML = "<p class='nq-empty'>Taking too long — <a href='javascript:location.reload()' style='color:#333;text-decoration:underline'>tap to retry</a></p>";
+    }
+  }, 12000);
+
+  // Fetch with up to 3 automatic retries
+  function doFetch(attempts) {
+    fetch(apiURL)
+      .then(function(r) {
+        if (!r.ok) throw new Error(r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        clearTimeout(giveUpTimer);
+        writeCache(data); // always update cache with fresh data
+        if (!cached) {
+          // First visit — render now
+          processVideos(data);
+        } else {
+          // Repeat visit — silently update allVideos for popup navigation
+          allVideos = data.videos || [];
+        }
+      })
+      .catch(function(err) {
+        if (attempts > 1) {
+          // Retry after 2.5s
+          setTimeout(function() { doFetch(attempts - 1); }, 2500);
+        }
+      });
+  }
+
+  doFetch(3);
 
   /* ───────────────────────── Card Builder ───────────────────────── */
   function buildCard(video, index) {
@@ -605,6 +641,48 @@
       '</div>' +
       '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '">SHOP NOW</a>';
   }
+})();
+</script>
+
+<!-- NQ Keep-Warm: fires immediately + every 4min to prevent Vercel cold start -->
+<script>
+(function() {
+  // Only run once per page — use a flag on window
+  if (window._nqWarmInit) return;
+  window._nqWarmInit = true;
+
+  var API  = "https://queuniverse-shoppable.vercel.app/api/videos";
+  var shop = "{{ shop.permanent_domain }}";
+  var url  = API + "?shop=" + shop + "&page=home";
+  var KEY  = "nq_v3_" + shop;
+  var TTL  = 24 * 60 * 60 * 1000; // 24h
+
+  function ping() {
+    fetch(url, { keepalive: true })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.videos) {
+          try {
+            localStorage.setItem(KEY, JSON.stringify({ ts: Date.now(), data: data }));
+          } catch(e) {}
+        }
+      })
+      .catch(function() {
+        // Retry in 20s if failed
+        setTimeout(ping, 20000);
+      });
+  }
+
+  // Ping immediately on page load (wakes Vercel before user scrolls to carousel)
+  ping();
+
+  // Keep pinging every 4 minutes while tab is open
+  setInterval(ping, 4 * 60 * 1000);
+
+  // Ping again when user returns to the tab after being away
+  document.addEventListener("visibilitychange", function() {
+    if (document.visibilityState === "visible") ping();
+  });
 })();
 </script>
 
