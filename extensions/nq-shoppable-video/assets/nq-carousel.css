@@ -27,6 +27,22 @@
   font-size: 14px;
 }
 
+/* ============================================================
+   SKELETON LOADING — shown instantly while API loads
+   ============================================================ */
+.nq-skeleton {
+  border-radius: 12px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: nq-shimmer 1.4s infinite;
+}
+
+@keyframes nq-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* ── Carousel (horizontal scroll) ───────────────────────── */
 .nq-carousel-wrap {
   position: relative;

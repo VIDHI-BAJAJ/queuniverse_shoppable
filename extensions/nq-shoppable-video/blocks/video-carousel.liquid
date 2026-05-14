@@ -79,37 +79,90 @@
   var currentIndex = 0;
   var active3D = 0;
 
-  fetch(API + "?shop=" + shop + "&page=home")
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      allVideos = data.videos || [];
-      // Debug: log API response to browser console
-      console.log("[NQ Carousel] API response:", data);
-      console.log("[NQ Carousel] Videos loaded:", allVideos.length);
-      allVideos.forEach(function(v, i) {
-        console.log("[NQ Carousel] Video " + i + ":", v.r2_url, "| product_ids:", v.product_ids, "| product_handle:", v.product_handle);
-      });
+  // Show skeleton cards immediately while API loads
+  var container = document.getElementById("nq-carousel-" + blockId);
+  if (container) {
+    container.innerHTML = "";
+    for (var s = 0; s < 5; s++) {
+      var sk = document.createElement("div");
+      sk.className = "nq-skeleton";
+      sk.style.cssText = "width:" + cardW + "px;height:" + cardH + "px;flex-shrink:0;";
+      container.appendChild(sk);
+    }
+  }
 
-      var container = document.getElementById("nq-carousel-" + blockId);
-      if (!container) return;
-      container.innerHTML = "";
+  // Use sessionStorage cache so re-visits are instant
+  var cacheKey = "nq_videos_" + shop;
+  var cached   = sessionStorage ? sessionStorage.getItem(cacheKey) : null;
 
-      if (!allVideos.length) {
-        container.innerHTML = "<p class='nq-empty'>No videos yet.</p>";
-        return;
-      }
+  function processVideos(data) {
+    allVideos = data.videos || [];
+    var cont = document.getElementById("nq-carousel-" + blockId);
+    if (!cont) return;
+    cont.innerHTML = "";
 
-      allVideos.forEach(function(video, index) {
-        container.appendChild(buildCard(video, index));
-      });
+    if (!allVideos.length) {
+      cont.innerHTML = "<p class='nq-empty'>No videos yet.</p>";
+      return;
+    }
 
+    // Render first 3 cards immediately, rest deferred
+    var firstBatch = allVideos.slice(0, 3);
+    var restBatch  = allVideos.slice(3);
+
+    firstBatch.forEach(function(video, index) {
+      cont.appendChild(buildCard(video, index));
+    });
+
+    // Defer remaining cards so browser paints first 3 fast
+    if (restBatch.length) {
+      setTimeout(function() {
+        restBatch.forEach(function(video, index) {
+          cont.appendChild(buildCard(video, index + 3));
+        });
+        if (tileType === "feed_on_scroll") {
+          initScrollReveal(cont);
+        } else if (tileType === "3d_navigation") {
+          init3D();
+        } else {
+          initScrollBtns();
+        }
+      }, 60);
+    } else {
       if (tileType === "feed_on_scroll") {
-        initScrollReveal(container);
+        initScrollReveal(cont);
       } else if (tileType === "3d_navigation") {
         init3D();
       } else {
         initScrollBtns();
       }
+    }
+  }
+
+  if (cached) {
+    try { processVideos(JSON.parse(cached)); } catch(e) {}
+  }
+
+  // Always fetch fresh — updates cache for next visit
+  var controller = window.AbortController ? new AbortController() : null;
+  var fetchOpts  = controller ? { signal: controller.signal } : {};
+  var timer = setTimeout(function() {
+    if (controller) controller.abort();
+    if (!allVideos.length && container) {
+      container.innerHTML = "<p class='nq-empty'>Could not load videos. Please refresh.</p>";
+    }
+  }, 8000); // 8s hard timeout
+
+  fetch(API + "?shop=" + shop + "&page=home", fetchOpts)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      clearTimeout(timer);
+      // Save to cache
+      if (sessionStorage) {
+        try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch(e) {}
+      }
+      // Only re-render if we didn't already render from cache
+      if (!cached) { processVideos(data); } else { allVideos = data.videos || []; }
     });
 
   /* ───────────────────────── Card Builder ───────────────────────── */
@@ -118,15 +171,32 @@
     card.className = "nq-card nq-tile-" + tileType;
 
     var videoEl = document.createElement("video");
-    videoEl.src = video.r2_url;
-    videoEl.muted = true;
-    videoEl.loop = true;
+    videoEl.dataset.src = video.r2_url;
+    videoEl.muted       = true;
+    videoEl.loop        = true;
     videoEl.playsInline = true;
-    videoEl.className = "nq-video-el";
+    videoEl.preload     = "none";
+    videoEl.className   = "nq-video-el";
 
-    card.onmouseenter = function() { videoEl.play(); };
+    card.onmouseenter = function() {
+      if (!videoEl.src && videoEl.dataset.src) { videoEl.src = videoEl.dataset.src; }
+      videoEl.play();
+    };
     card.onmouseleave = function() { videoEl.pause(); videoEl.currentTime = 0; };
     card.onclick = function() { nqOpenPopup(blockId, index); };
+
+    if ("IntersectionObserver" in window) {
+      (new IntersectionObserver(function(entries, obs) {
+        entries.forEach(function(e) {
+          if (e.isIntersecting && !videoEl.src && videoEl.dataset.src) {
+            videoEl.src = videoEl.dataset.src;
+            obs.unobserve(e.target);
+          }
+        });
+      }, { rootMargin: "300px" })).observe(card);
+    } else {
+      videoEl.src = video.r2_url;
+    }
 
     var views = document.createElement("div");
     views.className = "nq-views";
