@@ -40,15 +40,27 @@
 
 </div>
 
-<!-- Fullscreen Popup -->
+<!-- Fullscreen Popup — Desktop: left/right arrows | Mobile: full-screen reel swipe -->
 <div class="nq-popup" id="nq-popup-{{ block.id }}">
-  <div class="nq-popup-overlay" onclick="nqClosePopup('{{ block.id }}')"></div>
-  <div class="nq-popup-content">
-    <button class="nq-popup-close" onclick="nqClosePopup('{{ block.id }}')">&#10005;</button>
+  <!-- Desktop overlay click to close -->
+  <div class="nq-popup-overlay" id="nq-popup-overlay-{{ block.id }}"></div>
+
+  <!-- Desktop layout: prev | video | next -->
+  <div class="nq-popup-content" id="nq-popup-content-{{ block.id }}">
     <button class="nq-popup-prev" onclick="nqPrevVideo('{{ block.id }}')">&#10094;</button>
-    <div class="nq-popup-video-wrap">
-      <video class="nq-popup-video" id="nq-popup-video-{{ block.id }}" autoplay muted playsinline controls></video>
+    <div class="nq-popup-video-wrap" id="nq-popup-wrap-{{ block.id }}">
+      <!-- Close button -->
+      <button class="nq-popup-close" onclick="nqClosePopup('{{ block.id }}')">&#10005;</button>
+      <!-- Mute toggle -->
+      <button class="nq-popup-mute" id="nq-popup-mute-{{ block.id }}" onclick="nqToggleMute('{{ block.id }}')">&#128263;</button>
+      <!-- Video -->
+      <video class="nq-popup-video" id="nq-popup-video-{{ block.id }}" autoplay muted playsinline></video>
+      <!-- Product card -->
       <div class="nq-popup-product" id="nq-popup-product-{{ block.id }}"></div>
+      <!-- Mobile swipe hint (shown briefly on first open) -->
+      <div class="nq-swipe-hint" id="nq-swipe-hint-{{ block.id }}">
+        <span>&#8593; Swipe up for next</span>
+      </div>
     </div>
     <button class="nq-popup-next" onclick="nqNextVideo('{{ block.id }}')">&#10095;</button>
   </div>
@@ -71,6 +83,13 @@
     .then(function(r) { return r.json(); })
     .then(function(data) {
       allVideos = data.videos || [];
+      // Debug: log API response to browser console
+      console.log("[NQ Carousel] API response:", data);
+      console.log("[NQ Carousel] Videos loaded:", allVideos.length);
+      allVideos.forEach(function(v, i) {
+        console.log("[NQ Carousel] Video " + i + ":", v.r2_url, "| product_ids:", v.product_ids, "| product_handle:", v.product_handle);
+      });
+
       var container = document.getElementById("nq-carousel-" + blockId);
       if (!container) return;
       container.innerHTML = "";
@@ -122,8 +141,8 @@
       case "img_transparent_text_overlay_3":
       case "img_transparent_text_overlay_2":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
-        if (video.product_ids && video.product_ids.length) {
-          fetchProduct(video.product_ids[0]).then(function(p) {
+        getVideoProduct(video).then(function(p) {
+          if (true) {
             if (!p) return;
             var ov = document.createElement("div");
             ov.className = "nq-ov-transparent";
@@ -138,8 +157,8 @@
       /* 3 — Opaque white card overlapping bottom of video */
       case "img_opaque_text_overlay_3":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;overflow:visible;";
-        if (video.product_ids && video.product_ids.length) {
-          fetchProduct(video.product_ids[0]).then(function(p) {
+        getVideoProduct(video).then(function(p) {
+          if (true) {
             if (!p) return;
             var ov = document.createElement("div");
             ov.className = "nq-ov-opaque";
@@ -164,8 +183,8 @@
       case "product_below_2":
       case "product_below":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;overflow:visible;";
-        if (video.product_ids && video.product_ids.length) {
-          fetchProduct(video.product_ids[0]).then(function(p) {
+        getVideoProduct(video).then(function(p) {
+          if (true) {
             if (!p) return;
             var discHtml = '';
             if (p.compare_at_price && p.compare_at_price > p.price) {
@@ -193,8 +212,8 @@
       /* 8 — Feed View More: horizontal carousel + transparent overlay inside */
       case "feed_view_more":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
-        if (video.product_ids && video.product_ids.length) {
-          fetchProduct(video.product_ids[0]).then(function(p) {
+        getVideoProduct(video).then(function(p) {
+          if (true) {
             if (!p) return;
             var ov = document.createElement("div");
             ov.className = "nq-ov-transparent";
@@ -209,8 +228,8 @@
       /* 9 — Feed On Scroll: 2-col grid, fade-in, product below */
       case "feed_on_scroll":
         card.classList.add("nq-scroll-fade");
-        if (video.product_ids && video.product_ids.length) {
-          fetchProduct(video.product_ids[0]).then(function(p) {
+        getVideoProduct(video).then(function(p) {
+          if (true) {
             if (!p) return;
             var priceRow = '&#8377;' + fmt(p.price);
             if (p.compare_at_price && p.compare_at_price > p.price) {
@@ -239,8 +258,8 @@
       /* 12 — 3D Navigation */
       case "3d_navigation":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
-        if (video.product_ids && video.product_ids.length) {
-          fetchProduct(video.product_ids[0]).then(function(p) {
+        getVideoProduct(video).then(function(p) {
+          if (true) {
             if (!p) return;
             var ov = document.createElement("div");
             ov.className = "nq-ov-transparent";
@@ -268,27 +287,47 @@
     return (Math.round(parseInt(cents)) / 100).toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0});
   }
 
+  // Fetch product by GID or numeric ID
   function fetchProduct(productId) {
-    // Extract numeric ID from GID or use as-is if already numeric
     var id = productId.replace("gid://shopify/Product/", "");
-    // Use /products.json with handle search as fallback, primary: storefront by id
     return fetch("/products.json?limit=1&ids=" + id)
       .then(function(r) { return r.json(); })
       .then(function(d) {
         var pr = d.products && d.products[0];
         if (!pr || !pr.variants || !pr.variants[0]) return null;
         var v = pr.variants[0];
-        // Shopify REST API returns price as string e.g. "1899.00"
-        var price = Math.round(parseFloat(v.price) * 100);
-        var comparePrice = v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null;
         return {
           title:           pr.title,
-          price:           price,
-          compare_at_price: comparePrice,
+          price:           Math.round(parseFloat(v.price) * 100),
+          compare_at_price: v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null,
           handle:          pr.handle,
           image:           pr.images && pr.images[0] ? pr.images[0].src : null
         };
       }).catch(function() { return null; });
+  }
+
+  // Unified: get product for a video object (handles both product_ids and product_handle)
+  function getVideoProduct(video) {
+    if (video.product_ids && video.product_ids.length) {
+      return fetchProduct(video.product_ids[0]);
+    }
+    if (video.product_handle) {
+      return fetch("/products/" + video.product_handle + ".json")
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (!d.product || !d.product.variants || !d.product.variants[0]) return null;
+          var pr = d.product;
+          var v  = pr.variants[0];
+          return {
+            title:           pr.title,
+            price:           Math.round(parseFloat(v.price) * 100),
+            compare_at_price: v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null,
+            handle:          pr.handle,
+            image:           pr.images && pr.images[0] ? pr.images[0].src : null
+          };
+        }).catch(function() { return null; });
+    }
+    return Promise.resolve(null);
   }
 
   /* ───────────────────────── Scroll Buttons ─────────────────── */
@@ -361,17 +400,70 @@
   }
 
   /* ───────────────────────── Popup ─────────────────────────── */
+  var isMuted = true;
+  var touchStartY = 0;
+  var touchStartX = 0;
+  var swipeHintShown = false;
+
   window.nqOpenPopup = function(bid, index) {
     if (bid !== blockId) return;
     currentIndex = index;
     showPopup(bid);
-    document.getElementById("nq-popup-" + bid).classList.add("active");
+
+    var popup = document.getElementById("nq-popup-" + bid);
+    popup.classList.add("active");
     document.body.style.overflow = "hidden";
+
+    // Mobile: request fullscreen on the popup
+    if (window.innerWidth <= 768) {
+      popup.classList.add("nq-popup-mobile");
+      // Show swipe hint briefly
+      if (!swipeHintShown) {
+        swipeHintShown = true;
+        var hint = document.getElementById("nq-swipe-hint-" + bid);
+        if (hint) {
+          hint.classList.add("nq-swipe-hint-show");
+          setTimeout(function() { hint.classList.remove("nq-swipe-hint-show"); }, 2200);
+        }
+      }
+    } else {
+      popup.classList.remove("nq-popup-mobile");
+      // Desktop: overlay click closes
+      var overlay = document.getElementById("nq-popup-overlay-" + bid);
+      if (overlay) overlay.onclick = function() { nqClosePopup(bid); };
+    }
+
+    // Attach swipe listeners once
+    var wrap = document.getElementById("nq-popup-wrap-" + bid);
+    if (wrap && !wrap._nqSwipeInit) {
+      wrap._nqSwipeInit = true;
+
+      wrap.addEventListener("touchstart", function(e) {
+        touchStartY = e.touches[0].clientY;
+        touchStartX = e.touches[0].clientX;
+      }, { passive: true });
+
+      wrap.addEventListener("touchend", function(e) {
+        var dy = touchStartY - e.changedTouches[0].clientY;
+        var dx = touchStartX - e.changedTouches[0].clientX;
+        // Only trigger if vertical swipe dominates
+        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50) {
+          if (dy > 0) {
+            // Swipe UP → next video
+            nqNextVideo(bid);
+          } else {
+            // Swipe DOWN → prev video
+            nqPrevVideo(bid);
+          }
+        }
+      }, { passive: true });
+    }
   };
 
   window.nqClosePopup = function(bid) {
     if (bid !== blockId) return;
-    document.getElementById("nq-popup-" + bid).classList.remove("active");
+    var popup = document.getElementById("nq-popup-" + bid);
+    popup.classList.remove("active", "nq-popup-mobile");
     document.getElementById("nq-popup-video-" + bid).pause();
     document.body.style.overflow = "";
   };
@@ -388,6 +480,15 @@
     showPopup(bid);
   };
 
+  window.nqToggleMute = function(bid) {
+    if (bid !== blockId) return;
+    var videoEl = document.getElementById("nq-popup-video-" + bid);
+    var muteBtn = document.getElementById("nq-popup-mute-" + bid);
+    isMuted = !isMuted;
+    videoEl.muted = isMuted;
+    if (muteBtn) muteBtn.innerHTML = isMuted ? "&#128263;" : "&#128266;";
+  };
+
   function showPopup(bid) {
     var video   = allVideos[currentIndex];
     var videoEl = document.getElementById("nq-popup-video-" + bid);
@@ -397,28 +498,40 @@
     var pd = document.getElementById("nq-popup-product-" + bid);
     pd.innerHTML = "";
 
-    if (video.product_ids && video.product_ids.length) {
-      fetchProduct(video.product_ids[0]).then(function(p) {
-        if (!p) return;
+    // Support both product_ids (GID array) and product_handle (direct handle)
+    var hasProductIds   = video.product_ids && video.product_ids.length;
+    var hasHandle       = video.product_handle && video.product_handle.length;
 
-        // Build price line with compare-at if available
-        var priceHtml = '&#8377;' + fmt(p.price);
-        var compareHtml = '';
-        if (p.compare_at_price && p.compare_at_price > p.price) {
-          compareHtml = '<span class="nq-popup-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
-        }
+    console.log("[NQ Popup] video product_ids:", video.product_ids, "| product_handle:", video.product_handle);
 
-        pd.innerHTML =
-          '<div class="nq-popup-product-card">' +
-            (p.image ? '<img src="' + p.image + '" class="nq-popup-thumb">' : '') +
-            '<div class="nq-popup-product-info">' +
-              '<p class="nq-popup-product-title">' + p.title + '</p>' +
-              '<p class="nq-popup-product-price">' + priceHtml + ' ' + compareHtml + '</p>' +
-            '</div>' +
-          '</div>' +
-          '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '">SHOP NOW</a>';
+    if (hasProductIds || hasHandle) {
+      getVideoProduct(video).then(function(p) {
+        renderPopupProduct(pd, p);
       });
+    } else {
+      console.log("[NQ Popup] No product linked to this video.");
     }
+  }
+
+  function renderPopupProduct(pd, p) {
+    if (!p) { console.log("[NQ] fetchProduct returned null"); return; }
+    console.log("[NQ] Rendering product:", p.title, p.price, p.handle);
+
+    var priceHtml   = '&#8377;' + fmt(p.price);
+    var compareHtml = '';
+    if (p.compare_at_price && p.compare_at_price > p.price) {
+      compareHtml = '<span class="nq-popup-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
+    }
+
+    pd.innerHTML =
+      '<div class="nq-popup-product-card">' +
+        (p.image ? '<img src="' + p.image + '" class="nq-popup-thumb">' : '') +
+        '<div class="nq-popup-product-info">' +
+          '<p class="nq-popup-product-title">' + p.title + '</p>' +
+          '<p class="nq-popup-product-price">' + priceHtml + ' ' + compareHtml + '</p>' +
+        '</div>' +
+      '</div>' +
+      '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '">SHOP NOW</a>';
   }
 })();
 </script>
