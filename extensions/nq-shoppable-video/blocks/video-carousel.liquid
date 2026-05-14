@@ -290,8 +290,23 @@
     var container = document.getElementById("nq-carousel-" + blockId);
     var prev = document.getElementById("nq-prev-" + blockId);
     var next = document.getElementById("nq-next-" + blockId);
-    if (prev) prev.onclick = function() { container.scrollBy({ left: -(cardW + 12), behavior: "smooth" }); };
-    if (next) next.onclick = function() { container.scrollBy({ left:  (cardW + 12), behavior: "smooth" }); };
+
+    function updateArrows() {
+      if (prev) prev.disabled = container.scrollLeft <= 2;
+      if (next) next.disabled = container.scrollLeft + container.clientWidth >= container.scrollWidth - 2;
+    }
+
+    if (prev) prev.onclick = function() {
+      container.scrollBy({ left: -(cardW + 12), behavior: "smooth" });
+      setTimeout(updateArrows, 350);
+    };
+    if (next) next.onclick = function() {
+      container.scrollBy({ left: (cardW + 12), behavior: "smooth" });
+      setTimeout(updateArrows, 350);
+    };
+
+    container.addEventListener("scroll", updateArrows, { passive: true });
+    updateArrows(); // set initial state
   }
 
   /* ───────────────────────── Scroll Reveal ──────────────────── */
