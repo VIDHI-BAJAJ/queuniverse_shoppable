@@ -1,280 +1,356 @@
 {{ 'nq-carousel.css' | asset_url | stylesheet_tag }}
 
-<div class="nq-section">
-  <h2 class="nq-heading" style="font-size: {{ block.settings.heading_size_desktop }}px; color: {{ block.settings.heading_color }};">
-  {{ block.settings.heading }}
-</h2>
-  <div class="nq-carousel" id="nq-carousel-{{ block.id }}">
-    <div class="nq-loading">Loading videos...</div>
-  </div>
+<div class="nq-section nq-tile-type-{{ block.settings.tile_type }}"
+     style="padding: {{ block.settings.vertical_padding }}px {{ block.settings.horizontal_padding }}px;">
+
+  <h2 class="nq-heading"
+      style="font-size: {{ block.settings.heading_size_desktop }}px; color: {{ block.settings.heading_color }};">
+    {{ block.settings.heading }}
+  </h2>
+
+  {% assign tt = block.settings.tile_type %}
+
+  {% if tt == 'feed_on_scroll' or tt == 'grid_theme_border' or tt == 'grid_no_border' %}
+    <div class="nq-grid" id="nq-carousel-{{ block.id }}">
+      <div class="nq-loading">Loading videos...</div>
+    </div>
+
+  {% elsif tt == '3d_navigation' %}
+    <div class="nq-3d-wrap">
+      <button class="nq-3d-prev" id="nq-3d-prev-{{ block.id }}">&#10094;</button>
+      <div class="nq-3d-track" id="nq-carousel-{{ block.id }}"></div>
+      <button class="nq-3d-next" id="nq-3d-next-{{ block.id }}">&#10095;</button>
+    </div>
+
+  {% else %}
+    <div class="nq-carousel-wrap">
+      <div class="nq-carousel" id="nq-carousel-{{ block.id }}">
+        <div class="nq-loading">Loading videos...</div>
+      </div>
+      <button class="nq-scroll-btn nq-scroll-prev" id="nq-prev-{{ block.id }}">&#10094;</button>
+      <button class="nq-scroll-btn nq-scroll-next" id="nq-next-{{ block.id }}">&#10095;</button>
+    </div>
+  {% endif %}
+
+  {% if tt == 'feed_view_more' %}
+    <div class="nq-view-more-wrap">
+      <button class="nq-view-more-btn">VIEW MORE &#8964;</button>
+    </div>
+  {% endif %}
+
 </div>
 
 <!-- Fullscreen Popup -->
 <div class="nq-popup" id="nq-popup-{{ block.id }}">
   <div class="nq-popup-overlay" onclick="nqClosePopup('{{ block.id }}')"></div>
   <div class="nq-popup-content">
-    <button class="nq-popup-close" onclick="nqClosePopup('{{ block.id }}')">✕</button>
-    <button class="nq-popup-prev" onclick="nqPrevVideo('{{ block.id }}')">❮</button>
-    <button class="nq-popup-next" onclick="nqNextVideo('{{ block.id }}')">❯</button>
+    <button class="nq-popup-close" onclick="nqClosePopup('{{ block.id }}')">&#10005;</button>
+    <button class="nq-popup-prev" onclick="nqPrevVideo('{{ block.id }}')">&#10094;</button>
     <div class="nq-popup-video-wrap">
       <video class="nq-popup-video" id="nq-popup-video-{{ block.id }}" autoplay muted playsinline controls></video>
       <div class="nq-popup-product" id="nq-popup-product-{{ block.id }}"></div>
     </div>
+    <button class="nq-popup-next" onclick="nqNextVideo('{{ block.id }}')">&#10095;</button>
   </div>
 </div>
 
 <script>
 (function() {
-  var shop = "{{ shop.permanent_domain }}";
-  var API = "https://queuniverse-shoppable.vercel.app/api/videos";
-  var blockId = "{{ block.id }}";
+  var shop     = "{{ shop.permanent_domain }}";
+  var API      = "https://queuniverse-shoppable.vercel.app/api/videos";
+  var blockId  = "{{ block.id }}";
   var tileType = "{{ block.settings.tile_type }}";
-  var shopBtnColor = "{{ block.settings.shop_btn_color }}";
+  var btnColor = "{{ block.settings.shop_btn_color }}";
+  var cardH    = {{ block.settings.card_height }};
+  var cardW    = {{ block.settings.card_width }};
   var allVideos = [];
   var currentIndex = 0;
+  var active3D = 0;
 
   fetch(API + "?shop=" + shop + "&page=home")
     .then(function(r) { return r.json(); })
     .then(function(data) {
       allVideos = data.videos || [];
       var container = document.getElementById("nq-carousel-" + blockId);
+      if (!container) return;
       container.innerHTML = "";
 
       if (!allVideos.length) {
-        container.innerHTML = "<p style='padding:20px;color:#999;'>No videos yet.</p>";
+        container.innerHTML = "<p class='nq-empty'>No videos yet.</p>";
         return;
       }
 
       allVideos.forEach(function(video, index) {
-        var card = document.createElement("div");
-        card.className = "nq-card nq-tile-" + tileType;
-        card.onclick = function() { nqOpenPopup(blockId, index); };
-
-        var videoEl = document.createElement("video");
-        videoEl.src = video.r2_url;
-        videoEl.muted = true;
-        videoEl.loop = true;
-        videoEl.playsInline = true;
-        videoEl.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:12px;";
-
-        // Autoplay on hover
-        card.onmouseenter = function() { videoEl.play(); };
-        card.onmouseleave = function() { videoEl.pause(); videoEl.currentTime = 0; };
-
-        var views = document.createElement("div");
-        views.className = "nq-views";
-        views.innerHTML = "&#128065; " + (video.views || 0);
-
-        var playIcon = document.createElement("div");
-        playIcon.className = "nq-play-icon";
-        playIcon.innerHTML = "&#9654;";
-
-        card.appendChild(videoEl);
-        card.appendChild(views);
-        card.appendChild(playIcon);
-
-        // ── Tile-type specific product rendering ──────────────────────────
-        if (tileType === "img_transparent_text_overlay_3" ||
-            tileType === "img_transparent_text_overlay_2") {
-          // Transparent overlay: product thumbnail + title inside video bottom
-          if (video.product_ids && video.product_ids.length > 0) {
-            fetchProduct(video.product_ids[0]).then(function(product) {
-              if (!product) return;
-              var overlay = document.createElement("div");
-              overlay.className = "nq-overlay nq-overlay-transparent";
-              overlay.innerHTML =
-                (product.image ? '<img src="' + product.image + '" alt="' + product.title + '">' : '') +
-                '<p class="nq-overlay-title">' + product.title + '</p>';
-              card.appendChild(overlay);
-            });
-          }
-
-        } else if (tileType === "img_opaque_text_overlay_3") {
-          // Opaque white card below video: product thumbnail + title + price
-          if (video.product_ids && video.product_ids.length > 0) {
-            fetchProduct(video.product_ids[0]).then(function(product) {
-              if (!product) return;
-              var overlay = document.createElement("div");
-              overlay.className = "nq-overlay nq-overlay-opaque";
-              overlay.innerHTML =
-                (product.image ? '<img src="' + product.image + '" alt="' + product.title + '">' : '') +
-                '<div>' +
-                '<p class="nq-overlay-title">' + product.title + '</p>' +
-                '<p class="nq-overlay-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
-                '</div>';
-              card.appendChild(overlay);
-            });
-          }
-
-        } else if (tileType === "single_tile_no_overlay") {
-          // No overlay – card only, no product info
-
-        } else if (tileType === "product_below_3" || tileType === "product_below_2" || tileType === "product_below") {
-          // Product info below card: title + price + discount badge
-          if (video.product_ids && video.product_ids.length > 0) {
-            fetchProduct(video.product_ids[0]).then(function(product) {
-              if (!product) return;
-              var priceNum = parseInt(product.price) / 100;
-              var comparePriceNum = product.compare_at_price ? parseInt(product.compare_at_price) / 100 : null;
-              var discountHtml = '';
-              if (comparePriceNum && comparePriceNum > priceNum) {
-                var pct = Math.round((comparePriceNum - priceNum) / comparePriceNum * 100);
-                discountHtml =
-                  '<span class="nq-product-original-price">₹' + comparePriceNum.toLocaleString('en-IN') + '</span>' +
-                  '<span class="nq-discount-badge">' + pct + '% off</span>';
-              }
-              var info = document.createElement("div");
-              info.className = "nq-product-info";
-              info.innerHTML =
-                '<p class="nq-product-title">' + product.title + '</p>' +
-                '<p class="nq-product-price">₹' + priceNum.toLocaleString('en-IN') + ' ' + discountHtml + '</p>';
-              card.appendChild(info);
-            });
-          }
-
-        } else if (tileType === "story_format") {
-          // Story: circular card — no product info shown on card itself
-
-        } else if (tileType === "feed_view_more") {
-          // Feed with "View More" CTA
-          if (video.product_ids && video.product_ids.length > 0) {
-            fetchProduct(video.product_ids[0]).then(function(product) {
-              if (!product) return;
-              var info = document.createElement("div");
-              info.className = "nq-product-info";
-              info.innerHTML =
-                '<p class="nq-product-title">' + product.title + '</p>' +
-                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
-                '<a href="/products/' + product.handle + '" class="nq-view-more">View More ›</a>';
-              card.appendChild(info);
-            });
-          }
-
-        } else if (tileType === "feed_on_scroll") {
-          // Feed on scroll – lazy load style, product info below
-          card.classList.add("nq-feed-scroll");
-          if (video.product_ids && video.product_ids.length > 0) {
-            fetchProduct(video.product_ids[0]).then(function(product) {
-              if (!product) return;
-              var info = document.createElement("div");
-              info.className = "nq-product-info";
-              info.innerHTML =
-                '<p class="nq-product-title">' + product.title + '</p>' +
-                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
-              card.appendChild(info);
-            });
-          }
-
-        } else if (tileType === "grid_theme_border") {
-          // Grid with themed border
-          card.classList.add("nq-grid-border");
-          if (video.product_ids && video.product_ids.length > 0) {
-            fetchProduct(video.product_ids[0]).then(function(product) {
-              if (!product) return;
-              var info = document.createElement("div");
-              info.className = "nq-product-info";
-              info.innerHTML =
-                '<p class="nq-product-title">' + product.title + '</p>' +
-                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
-              card.appendChild(info);
-            });
-          }
-
-        } else if (tileType === "grid_no_border") {
-          // Grid without border
-          card.classList.add("nq-grid-no-border");
-          if (video.product_ids && video.product_ids.length > 0) {
-            fetchProduct(video.product_ids[0]).then(function(product) {
-              if (!product) return;
-              var info = document.createElement("div");
-              info.className = "nq-product-info";
-              info.innerHTML =
-                '<p class="nq-product-title">' + product.title + '</p>' +
-                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
-              card.appendChild(info);
-            });
-          }
-
-        } else if (tileType === "3d_navigation") {
-          // 3D navigation carousel card
-          card.classList.add("nq-3d");
-          if (video.product_ids && video.product_ids.length > 0) {
-            fetchProduct(video.product_ids[0]).then(function(product) {
-              if (!product) return;
-              var overlay = document.createElement("div");
-              overlay.className = "nq-overlay nq-overlay-transparent";
-              overlay.innerHTML =
-                '<p class="nq-overlay-title">' + product.title + '</p>' +
-                '<p class="nq-overlay-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
-                '<a href="/products/' + product.handle + '" class="nq-shop-now" style="background:' + shopBtnColor + '">SHOP NOW</a>';
-              card.appendChild(overlay);
-            });
-          }
-
-        } else if (tileType === "minimal") {
-          // Minimal – video card only, no product details
-
-        } else {
-          // Fallback: product info below
-          if (video.product_ids && video.product_ids.length > 0) {
-            fetchProduct(video.product_ids[0]).then(function(product) {
-              if (!product) return;
-              var info = document.createElement("div");
-              info.className = "nq-product-info";
-              info.innerHTML =
-                '<p class="nq-product-title">' + product.title + '</p>' +
-                '<p class="nq-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>';
-              card.appendChild(info);
-            });
-          }
-        }
-        // ──────────────────────────────────────────────────────────────────
-
-        container.appendChild(card);
+        container.appendChild(buildCard(video, index));
       });
 
-      // Scroll buttons
-      var prevBtn = document.createElement("button");
-      prevBtn.className = "nq-scroll-btn nq-scroll-prev";
-      prevBtn.innerHTML = "&#10094;";
-      prevBtn.onclick = function() { container.scrollBy({ left: -300, behavior: "smooth" }); };
-
-      var nextBtn = document.createElement("button");
-      nextBtn.className = "nq-scroll-btn nq-scroll-next";
-      nextBtn.innerHTML = "&#10095;";
-      nextBtn.onclick = function() { container.scrollBy({ left: 300, behavior: "smooth" }); };
-
-      container.parentElement.appendChild(prevBtn);
-      container.parentElement.appendChild(nextBtn);
+      if (tileType === "feed_on_scroll") {
+        initScrollReveal(container);
+      } else if (tileType === "3d_navigation") {
+        init3D();
+      } else {
+        initScrollBtns();
+      }
     });
 
+  /* ───────────────────────── Card Builder ───────────────────────── */
+  function buildCard(video, index) {
+    var card = document.createElement("div");
+    card.className = "nq-card nq-tile-" + tileType;
+
+    var videoEl = document.createElement("video");
+    videoEl.src = video.r2_url;
+    videoEl.muted = true;
+    videoEl.loop = true;
+    videoEl.playsInline = true;
+    videoEl.className = "nq-video-el";
+
+    card.onmouseenter = function() { videoEl.play(); };
+    card.onmouseleave = function() { videoEl.pause(); videoEl.currentTime = 0; };
+    card.onclick = function() { nqOpenPopup(blockId, index); };
+
+    var views = document.createElement("div");
+    views.className = "nq-views";
+    views.innerHTML = "&#128065; " + (video.views || 0);
+
+    card.appendChild(videoEl);
+    card.appendChild(views);
+
+    switch (tileType) {
+
+      /* 1 & 2 — Transparent overlay: thumbnail + title at bottom of video */
+      case "img_transparent_text_overlay_3":
+      case "img_transparent_text_overlay_2":
+        card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
+        if (video.product_ids && video.product_ids.length) {
+          fetchProduct(video.product_ids[0]).then(function(p) {
+            if (!p) return;
+            var ov = document.createElement("div");
+            ov.className = "nq-ov-transparent";
+            ov.innerHTML =
+              (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
+              '<span class="nq-ov-title">' + p.title + '</span>';
+            card.appendChild(ov);
+          });
+        }
+        break;
+
+      /* 3 — Opaque white card overlapping bottom of video */
+      case "img_opaque_text_overlay_3":
+        card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;overflow:visible;";
+        if (video.product_ids && video.product_ids.length) {
+          fetchProduct(video.product_ids[0]).then(function(p) {
+            if (!p) return;
+            var ov = document.createElement("div");
+            ov.className = "nq-ov-opaque";
+            ov.innerHTML =
+              (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
+              '<div class="nq-ov-text">' +
+                '<span class="nq-ov-title">' + p.title + '</span>' +
+                '<span class="nq-ov-price">&#8377;' + fmt(p.price) + '</span>' +
+              '</div>';
+            card.appendChild(ov);
+          });
+        }
+        break;
+
+      /* 4 — Single tile, smaller, no product */
+      case "single_tile_no_overlay":
+        card.style.cssText += "width:" + Math.round(cardW * 0.72) + "px;height:" + Math.round(cardH * 0.65) + "px;";
+        break;
+
+      /* 5 & 6 — Product info below card */
+      case "product_below_3":
+      case "product_below_2":
+      case "product_below":
+        card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;overflow:visible;";
+        if (video.product_ids && video.product_ids.length) {
+          fetchProduct(video.product_ids[0]).then(function(p) {
+            if (!p) return;
+            var discHtml = '';
+            if (p.compare_at_price && p.compare_at_price > p.price) {
+              var pct = Math.round((p.compare_at_price - p.price) / p.compare_at_price * 100);
+              discHtml =
+                '<span class="nq-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>' +
+                '<span class="nq-disc-badge">' + pct + '% off</span>';
+            }
+            var info = document.createElement("div");
+            info.className = "nq-below-info";
+            info.innerHTML =
+              '<p class="nq-below-title">' + p.title + '</p>' +
+              '<p class="nq-below-price">&#8377;' + fmt(p.price) + ' ' + discHtml + '</p>';
+            card.appendChild(info);
+          });
+        }
+        break;
+
+      /* 7 — Story: circular card */
+      case "story_format":
+        card.style.cssText += "width:110px;height:110px;border-radius:50%;";
+        views.style.display = "none";
+        break;
+
+      /* 8 — Feed View More: horizontal carousel + transparent overlay inside */
+      case "feed_view_more":
+        card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
+        if (video.product_ids && video.product_ids.length) {
+          fetchProduct(video.product_ids[0]).then(function(p) {
+            if (!p) return;
+            var ov = document.createElement("div");
+            ov.className = "nq-ov-transparent";
+            ov.innerHTML =
+              (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
+              '<span class="nq-ov-title">' + p.title + '</span>';
+            card.appendChild(ov);
+          });
+        }
+        break;
+
+      /* 9 — Feed On Scroll: 2-col grid, fade-in, product below */
+      case "feed_on_scroll":
+        card.classList.add("nq-scroll-fade");
+        if (video.product_ids && video.product_ids.length) {
+          fetchProduct(video.product_ids[0]).then(function(p) {
+            if (!p) return;
+            var priceRow = '&#8377;' + fmt(p.price);
+            if (p.compare_at_price && p.compare_at_price > p.price) {
+              priceRow += ' <span class="nq-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
+            }
+            var info = document.createElement("div");
+            info.className = "nq-below-info";
+            info.innerHTML =
+              '<p class="nq-below-title">' + p.title + '</p>' +
+              '<p class="nq-below-price">' + priceRow + '</p>';
+            card.appendChild(info);
+          });
+        }
+        break;
+
+      /* 10 — Grid Theme Border: rounded coloured border, no product info */
+      case "grid_theme_border":
+        card.style.border = "3px solid " + btnColor;
+        break;
+
+      /* 11 — Grid No Border: flush grid, no border */
+      case "grid_no_border":
+        card.style.borderRadius = "0";
+        break;
+
+      /* 12 — 3D Navigation */
+      case "3d_navigation":
+        card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
+        if (video.product_ids && video.product_ids.length) {
+          fetchProduct(video.product_ids[0]).then(function(p) {
+            if (!p) return;
+            var ov = document.createElement("div");
+            ov.className = "nq-ov-transparent";
+            ov.innerHTML =
+              (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
+              '<span class="nq-ov-title">' + p.title + '</span>';
+            card.appendChild(ov);
+          });
+        }
+        break;
+
+      /* 13 — Minimal */
+      case "minimal":
+      default:
+        card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
+        break;
+    }
+
+    return card;
+  }
+
+  /* ───────────────────────── Helpers ───────────────────────── */
+  function fmt(cents) {
+    return (parseInt(cents) / 100).toLocaleString('en-IN');
+  }
+
   function fetchProduct(productId) {
-    var numericId = productId.replace("gid://shopify/Product/", "");
-    return fetch("/products.json?ids=" + numericId)
+    var id = productId.replace("gid://shopify/Product/", "");
+    return fetch("/products.json?ids=" + id)
       .then(function(r) { return r.json(); })
-      .then(function(data) {
-        return data.products && data.products[0] ? data.products[0].variants[0] ? {
-          title: data.products[0].title,
-          price: data.products[0].variants[0].price * 100,
-          compare_at_price: data.products[0].variants[0].compare_at_price ? data.products[0].variants[0].compare_at_price * 100 : null,
-          handle: data.products[0].handle,
-          image: data.products[0].images[0] ? data.products[0].images[0].src : null
-        } : null : null;
+      .then(function(d) {
+        if (!d.products || !d.products[0] || !d.products[0].variants[0]) return null;
+        var pr = d.products[0];
+        var v  = pr.variants[0];
+        return {
+          title:           pr.title,
+          price:           v.price * 100,
+          compare_at_price: v.compare_at_price ? v.compare_at_price * 100 : null,
+          handle:          pr.handle,
+          image:           pr.images[0] ? pr.images[0].src : null
+        };
       }).catch(function() { return null; });
   }
 
+  /* ───────────────────────── Scroll Buttons ─────────────────── */
+  function initScrollBtns() {
+    var container = document.getElementById("nq-carousel-" + blockId);
+    var prev = document.getElementById("nq-prev-" + blockId);
+    var next = document.getElementById("nq-next-" + blockId);
+    if (prev) prev.onclick = function() { container.scrollBy({ left: -(cardW + 12), behavior: "smooth" }); };
+    if (next) next.onclick = function() { container.scrollBy({ left:  (cardW + 12), behavior: "smooth" }); };
+  }
+
+  /* ───────────────────────── Scroll Reveal ──────────────────── */
+  function initScrollReveal(container) {
+    var cards = container.querySelectorAll(".nq-scroll-fade");
+    if (!("IntersectionObserver" in window)) {
+      cards.forEach(function(c) { c.classList.add("nq-visible"); });
+      return;
+    }
+    var io = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) {
+        if (e.isIntersecting) { e.target.classList.add("nq-visible"); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.12 });
+    cards.forEach(function(c) { io.observe(c); });
+  }
+
+  /* ───────────────────────── 3D Coverflow ──────────────────── */
+  function init3D() {
+    var track   = document.getElementById("nq-carousel-" + blockId);
+    var prevBtn = document.getElementById("nq-3d-prev-" + blockId);
+    var nextBtn = document.getElementById("nq-3d-next-" + blockId);
+    var cards   = track.querySelectorAll(".nq-card");
+    active3D    = Math.floor(cards.length / 2);
+
+    function render() {
+      cards.forEach(function(card, i) {
+        var diff  = i - active3D;
+        var abs   = Math.abs(diff);
+        var scale = abs === 0 ? 1 : abs === 1 ? 0.80 : 0.65;
+        var tx    = diff * (cardW * 0.68);
+        var tz    = abs === 0 ? 0 : -100;
+        var ry    = diff * -24;
+        var op    = abs === 0 ? 1 : abs === 1 ? 0.65 : 0.40;
+        card.style.cssText +=
+          ";transform:translateX(" + tx + "px) translateZ(" + tz + "px) rotateY(" + ry + "deg) scale(" + scale + ")" +
+          ";opacity:" + op +
+          ";z-index:" + (20 - abs) +
+          ";transition:all 0.4s cubic-bezier(.4,0,.2,1)";
+      });
+    }
+
+    if (prevBtn) prevBtn.onclick = function() { if (active3D > 0) { active3D--; render(); } };
+    if (nextBtn) nextBtn.onclick = function() { if (active3D < cards.length - 1) { active3D++; render(); } };
+    render();
+  }
+
+  /* ───────────────────────── Popup ─────────────────────────── */
   window.nqOpenPopup = function(bid, index) {
     if (bid !== blockId) return;
     currentIndex = index;
-    nqShowPopupVideo(bid);
+    showPopup(bid);
     document.getElementById("nq-popup-" + bid).classList.add("active");
     document.body.style.overflow = "hidden";
   };
 
   window.nqClosePopup = function(bid) {
     if (bid !== blockId) return;
-    var popup = document.getElementById("nq-popup-" + bid);
-    popup.classList.remove("active");
+    document.getElementById("nq-popup-" + bid).classList.remove("active");
     document.getElementById("nq-popup-video-" + bid).pause();
     document.body.style.overflow = "";
   };
@@ -282,35 +358,35 @@
   window.nqPrevVideo = function(bid) {
     if (bid !== blockId) return;
     currentIndex = (currentIndex - 1 + allVideos.length) % allVideos.length;
-    nqShowPopupVideo(bid);
+    showPopup(bid);
   };
 
   window.nqNextVideo = function(bid) {
     if (bid !== blockId) return;
     currentIndex = (currentIndex + 1) % allVideos.length;
-    nqShowPopupVideo(bid);
+    showPopup(bid);
   };
 
-  function nqShowPopupVideo(bid) {
-    var video = allVideos[currentIndex];
+  function showPopup(bid) {
+    var video   = allVideos[currentIndex];
     var videoEl = document.getElementById("nq-popup-video-" + bid);
     videoEl.src = video.r2_url;
     videoEl.play();
 
-    var productDiv = document.getElementById("nq-popup-product-" + bid);
-    productDiv.innerHTML = "";
+    var pd = document.getElementById("nq-popup-product-" + bid);
+    pd.innerHTML = "";
 
-    if (video.product_ids && video.product_ids.length > 0) {
-      fetchProduct(video.product_ids[0]).then(function(product) {
-        if (!product) return;
-        productDiv.innerHTML =
+    if (video.product_ids && video.product_ids.length) {
+      fetchProduct(video.product_ids[0]).then(function(p) {
+        if (!p) return;
+        pd.innerHTML =
           '<div class="nq-popup-product-card">' +
-          (product.image ? '<img src="' + product.image + '" alt="' + product.title + '">' : '') +
+          (p.image ? '<img src="' + p.image + '">' : '') +
           '<div class="nq-popup-product-info">' +
-          '<p class="nq-popup-product-title">' + product.title + '</p>' +
-          '<p class="nq-popup-product-price">₹' + (parseInt(product.price) / 100).toLocaleString('en-IN') + '</p>' +
+            '<p class="nq-popup-product-title">' + p.title + '</p>' +
+            '<p class="nq-popup-product-price">&#8377;' + fmt(p.price) + '</p>' +
           '</div>' +
-          '<a href="/products/' + product.handle + '" class="nq-shop-now" style="background:' + shopBtnColor + '">SHOP NOW</a>' +
+          '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '">SHOP NOW</a>' +
           '</div>';
       });
     }
@@ -381,7 +457,7 @@
       "min": 120,
       "max": 400,
       "step": 10,
-      "default": 220
+      "default": 200
     },
     {
       "type": "select",

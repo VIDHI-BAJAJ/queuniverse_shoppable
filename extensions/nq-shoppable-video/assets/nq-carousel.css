@@ -1,21 +1,32 @@
 /* ============================================================
-   NQ Video Carousel — Base Styles
+   NQ Video Carousel — Complete Stylesheet
    ============================================================ */
 
+/* ── Section wrapper ─────────────────────────────────────── */
 .nq-section {
   position: relative;
-  padding: var(--nq-vpad, 20px) var(--nq-hpad, 40px);
   box-sizing: border-box;
+  overflow: hidden; /* clips 3D track bleed */
 }
 
 .nq-heading {
   text-align: center;
-  margin: 0 0 24px;
+  margin: 0 0 28px;
   font-weight: 400;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.3px;
 }
 
-/* Carousel scroll container */
+.nq-empty {
+  padding: 20px;
+  color: #999;
+  font-size: 14px;
+}
+
+/* ── Carousel (horizontal scroll) ───────────────────────── */
+.nq-carousel-wrap {
+  position: relative;
+}
+
 .nq-carousel {
   display: flex;
   gap: 12px;
@@ -23,19 +34,11 @@
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  padding-bottom: 8px;
-  position: relative;
+  padding-bottom: 4px;
 }
 .nq-carousel::-webkit-scrollbar { display: none; }
 
-/* Loading state */
-.nq-loading {
-  padding: 20px;
-  color: #999;
-  font-size: 14px;
-}
-
-/* ── Scroll Buttons ─────────────────────────────────────────── */
+/* ── Scroll arrow buttons ───────────────────────────────── */
 .nq-scroll-btn {
   position: absolute;
   top: 50%;
@@ -46,160 +49,130 @@
   border-radius: 50%;
   width: 40px;
   height: 40px;
-  font-size: 16px;
+  font-size: 15px;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.18);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: box-shadow 0.2s;
 }
-.nq-scroll-btn:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.28); }
+.nq-scroll-btn:hover { box-shadow: 0 4px 18px rgba(0,0,0,0.26); }
 .nq-scroll-prev { left: 4px; }
 .nq-scroll-next { right: 4px; }
 
-/* ── Base Card ───────────────────────────────────────────────── */
+/* ── Base card ──────────────────────────────────────────── */
 .nq-card {
   position: relative;
   flex: 0 0 auto;
-  width: 200px;
-  height: 340px;
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
   scroll-snap-align: start;
   background: #111;
-  transition: transform 0.2s;
+  transition: transform 0.22s ease;
 }
-.nq-card:hover { transform: scale(1.02); }
+.nq-card:hover { transform: scale(1.025); }
+
+.nq-video-el {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
+}
 
 /* Views badge */
 .nq-views {
   position: absolute;
   top: 10px;
   left: 10px;
-  background: rgba(0,0,0,0.55);
+  background: rgba(0,0,0,0.52);
   color: #fff;
   font-size: 12px;
   padding: 3px 8px;
   border-radius: 20px;
-  z-index: 3;
+  z-index: 5;
   display: flex;
   align-items: center;
-  gap: 4px;
-  backdrop-filter: blur(4px);
+  gap: 3px;
+  backdrop-filter: blur(3px);
 }
-
-/* Play icon */
-.nq-play-icon {
-  position: absolute;
-  bottom: 14px;
-  right: 14px;
-  color: rgba(255,255,255,0.7);
-  font-size: 20px;
-  z-index: 3;
-  pointer-events: none;
-}
-
 
 /* ============================================================
-   TILE TYPE 1 & 2 — Transparent Text Overlay
-   (Image & Transparent Text Overlay — 2 or 3 tiles)
-   Product thumbnail + title inside video, semi-transparent bg
+   TILE 1 & 2 — Transparent Text Overlay
+   Semi-transparent bar at bottom: product thumb + title
    ============================================================ */
-
 .nq-tile-img_transparent_text_overlay_3,
 .nq-tile-img_transparent_text_overlay_2 {
-  width: 200px;
-  height: 340px;
+  border-radius: 14px;
 }
 
-.nq-tile-img_transparent_text_overlay_3 .nq-overlay,
-.nq-tile-img_transparent_text_overlay_2 .nq-overlay {
+.nq-ov-transparent {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 4;
-  padding: 10px 10px 12px;
-  background: rgba(0, 0, 0, 0.38);
-  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   gap: 8px;
-  border-radius: 0 0 14px 14px;
+  padding: 10px 10px 12px;
+  background: rgba(0,0,0,0.40);
+  backdrop-filter: blur(2px);
+  border-radius: 0 0 12px 12px;
 }
 
-.nq-tile-img_transparent_text_overlay_3 .nq-overlay img,
-.nq-tile-img_transparent_text_overlay_2 .nq-overlay img {
+.nq-ov-transparent .nq-ov-thumb {
   width: 44px;
   height: 44px;
   object-fit: cover;
   border-radius: 6px;
   flex-shrink: 0;
-  border: 1.5px solid rgba(255,255,255,0.4);
+  border: 1.5px solid rgba(255,255,255,0.35);
 }
 
-.nq-tile-img_transparent_text_overlay_3 .nq-overlay-title,
-.nq-tile-img_transparent_text_overlay_2 .nq-overlay-title {
+.nq-ov-transparent .nq-ov-title {
   color: #fff;
   font-size: 12px;
   font-weight: 600;
-  line-height: 1.3;
-  margin: 0;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+  line-height: 1.35;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* Hide price in transparent overlay (matches Image 1) */
-.nq-tile-img_transparent_text_overlay_3 .nq-overlay-price,
-.nq-tile-img_transparent_text_overlay_2 .nq-overlay-price {
-  display: none;
-}
-
-/* Hide generic shop now button in overlay tiles — info is the overlay itself */
-.nq-tile-img_transparent_text_overlay_3 .nq-shop-now,
-.nq-tile-img_transparent_text_overlay_2 .nq-shop-now {
-  display: none;
-}
-
-
 /* ============================================================
-   TILE TYPE 3 — Opaque Text Overlay
-   (Img & Opaque Text Overlay — 3 tiles)
-   White card at the bottom of the video, outside the frame
+   TILE 3 — Opaque Text Overlay
+   White card overlapping bottom of video: thumb + title + price
    ============================================================ */
-
 .nq-tile-img_opaque_text_overlay_3 {
-  width: 200px;
-  height: 340px;
-  overflow: visible; /* allow the white card to appear below */
-  margin-bottom: 80px; /* space for the card below */
-}
-
-.nq-tile-img_opaque_text_overlay_3 > video {
   border-radius: 14px;
+  overflow: visible !important; /* card extends below video */
 }
 
-.nq-tile-img_opaque_text_overlay_3 .nq-overlay {
+.nq-tile-img_opaque_text_overlay_3 .nq-video-el {
+  border-radius: 14px 14px 0 0;
+}
+
+.nq-ov-opaque {
   position: absolute;
-  bottom: -72px;
+  bottom: -64px;
   left: 0;
   right: 0;
-  background: #fff;
-  border-radius: 0 0 12px 12px;
-  padding: 8px 10px 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 10px;
+  background: #fff;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.10);
   z-index: 4;
 }
 
-.nq-tile-img_opaque_text_overlay_3 .nq-overlay img {
+.nq-ov-opaque .nq-ov-thumb {
   width: 44px;
   height: 44px;
   object-fit: cover;
@@ -208,11 +181,17 @@
   border: 1px solid #eee;
 }
 
-.nq-tile-img_opaque_text_overlay_3 .nq-overlay-title {
+.nq-ov-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nq-ov-opaque .nq-ov-title {
   font-size: 12px;
   font-weight: 600;
   color: #111;
-  margin: 0 0 2px;
   line-height: 1.3;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -220,83 +199,56 @@
   overflow: hidden;
 }
 
-.nq-tile-img_opaque_text_overlay_3 .nq-overlay-price {
+.nq-ov-opaque .nq-ov-price {
   font-size: 12px;
-  color: #111;
-  margin: 0;
   font-weight: 500;
+  color: #333;
 }
-
-.nq-tile-img_opaque_text_overlay_3 .nq-shop-now {
-  display: none;
-}
-
 
 /* ============================================================
-   TILE TYPE 4 — Single Tile / Minimal (No Overlay)
-   Small video cards, no product info — Image 3
+   TILE 4 — Single Tile / No Overlay
+   Smaller cards, clean, no product info
    ============================================================ */
-
-.nq-tile-single_tile_no_overlay,
-.nq-tile-minimal {
-  width: 140px;
-  height: 220px;
+.nq-tile-single_tile_no_overlay {
   border-radius: 10px;
 }
 
-.nq-tile-single_tile_no_overlay .nq-play-icon,
-.nq-tile-minimal .nq-play-icon {
-  display: none;
-}
-
-.nq-tile-single_tile_no_overlay .nq-product-info,
-.nq-tile-minimal .nq-product-info,
-.nq-tile-single_tile_no_overlay .nq-overlay,
-.nq-tile-minimal .nq-overlay {
-  display: none;
-}
-
-
 /* ============================================================
-   TILE TYPE 5 & 6 — Product Info Below
-   (Product Info Below tile — 2 or 3 tiles)
-   Title + price + discount badge below the video — Image 4
+   TILE 5 & 6 — Product Info Below
+   Title + price + strikethrough + discount badge below card
    ============================================================ */
-
 .nq-tile-product_below_3,
 .nq-tile-product_below_2,
 .nq-tile-product_below {
-  width: 200px;
-  height: 340px;
-  overflow: visible;
-  margin-bottom: 90px;
+  border-radius: 12px;
+  overflow: visible !important;
+  margin-bottom: 80px; /* space for info below */
 }
 
-.nq-tile-product_below_3 > video,
-.nq-tile-product_below_2 > video,
-.nq-tile-product_below > video {
-  border-radius: 14px;
+.nq-tile-product_below_3 .nq-video-el,
+.nq-tile-product_below_2 .nq-video-el,
+.nq-tile-product_below .nq-video-el {
+  border-radius: 12px;
 }
 
-/* Product info block sits below the card */
-.nq-tile-product_below_3 .nq-product-info,
-.nq-tile-product_below_2 .nq-product-info,
-.nq-tile-product_below .nq-product-info {
+.nq-below-info {
+  padding: 8px 4px 0;
+}
+
+.nq-tile-product_below_3 .nq-below-info,
+.nq-tile-product_below_2 .nq-below-info,
+.nq-tile-product_below .nq-below-info {
   position: absolute;
-  bottom: -88px;
+  bottom: -78px;
   left: 0;
   right: 0;
-  padding: 8px 6px 4px;
-  background: transparent;
 }
 
-.nq-tile-product_below_3 .nq-product-title,
-.nq-tile-product_below_2 .nq-product-title,
-.nq-tile-product_below .nq-product-title {
+.nq-below-title {
   font-size: 13px;
   font-weight: 500;
   color: #111;
-  margin: 0 0 4px;
+  margin: 0 0 5px;
   line-height: 1.35;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -304,306 +256,238 @@
   overflow: hidden;
 }
 
-.nq-tile-product_below_3 .nq-product-price,
-.nq-tile-product_below_2 .nq-product-price,
-.nq-tile-product_below .nq-product-price {
+.nq-below-price {
   font-size: 13px;
   font-weight: 600;
   color: #111;
-  margin: 0 0 4px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
-/* Discount badge */
-.nq-tile-product_below_3 .nq-discount-badge,
-.nq-tile-product_below_2 .nq-discount-badge,
-.nq-tile-product_below .nq-discount-badge {
-  display: inline-block;
-  background: #2ecc71;
-  color: #fff;
+.nq-orig-price {
+  font-size: 12px;
+  font-weight: 400;
+  color: #999;
+  text-decoration: line-through;
+}
+
+.nq-disc-badge {
   font-size: 11px;
   font-weight: 700;
+  background: #2ecc71;
+  color: #fff;
   padding: 2px 7px;
   border-radius: 4px;
 }
 
-/* Strike-through original price */
-.nq-tile-product_below_3 .nq-product-original-price,
-.nq-tile-product_below_2 .nq-product-original-price,
-.nq-tile-product_below .nq-product-original-price {
-  font-size: 12px;
-  color: #999;
-  text-decoration: line-through;
-  margin-left: 5px;
-  font-weight: 400;
-}
-
-
 /* ============================================================
-   TILE TYPE 7 — Story Like Format
-   Circular cards like Instagram Stories — Image 5
+   TILE 7 — Story Format
+   Circular cards like Instagram Stories
    ============================================================ */
-
 .nq-tile-story_format {
-  width: 110px;
-  height: 110px;
-  border-radius: 50%;
-  border: 3px solid #e91e8c;
-  overflow: hidden;
-  margin-bottom: 0;
-  box-shadow: 0 0 0 3px #fff, 0 0 0 5px #e91e8c;
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 3px #fff, 0 0 0 5.5px #000;
+  overflow: hidden !important;
+  flex-shrink: 0;
 }
 
-.nq-tile-story_format > video {
+.nq-tile-story_format .nq-video-el {
   border-radius: 50%;
-  object-position: center;
-}
-
-.nq-tile-story_format .nq-views,
-.nq-tile-story_format .nq-play-icon,
-.nq-tile-story_format .nq-product-info,
-.nq-tile-story_format .nq-overlay {
-  display: none;
 }
 
 .nq-tile-story_format:hover {
-  transform: scale(1.06);
-  box-shadow: 0 0 0 3px #fff, 0 0 0 6px #e91e8c;
+  transform: scale(1.07);
+  box-shadow: 0 0 0 3px #fff, 0 0 0 6.5px #000;
 }
 
-
 /* ============================================================
-   TILE TYPE 8 — Feed View More
+   TILE 8 — Feed View More
+   Horizontal carousel + transparent overlay + VIEW MORE button
    ============================================================ */
-
 .nq-tile-feed_view_more {
-  width: 200px;
-  height: 340px;
-  overflow: visible;
-  margin-bottom: 80px;
+  border-radius: 14px;
 }
 
-.nq-tile-feed_view_more .nq-product-info {
-  position: absolute;
-  bottom: -78px;
-  left: 0;
-  right: 0;
-  padding: 8px 6px 4px;
-  background: transparent;
+.nq-view-more-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
 }
 
-.nq-tile-feed_view_more .nq-product-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #111;
-  margin: 0 0 4px;
-}
-
-.nq-tile-feed_view_more .nq-product-price {
-  font-size: 13px;
+.nq-view-more-btn {
+  background: #111;
+  color: #fff;
+  border: none;
+  padding: 12px 36px;
+  font-size: 14px;
   font-weight: 600;
-  color: #111;
-  margin: 0 0 4px;
+  letter-spacing: 1px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
 }
-
-.nq-view-more {
-  display: inline-block;
-  font-size: 12px;
-  color: #555;
-  text-decoration: none;
-  font-weight: 500;
-  margin-top: 2px;
-}
-.nq-view-more:hover { color: #111; text-decoration: underline; }
-
+.nq-view-more-btn:hover { background: #333; }
 
 /* ============================================================
-   TILE TYPE 9 — Feed On Scroll
+   TILE 9 — Feed On Scroll
+   2-column grid, cards fade in as you scroll
    ============================================================ */
+.nq-tile-type-feed_on_scroll .nq-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
 
 .nq-tile-feed_on_scroll {
-  width: 200px;
-  height: 340px;
-  overflow: visible;
-  margin-bottom: 80px;
-  opacity: 0;
-  transition: opacity 0.5s ease;
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 9/16;
+  border-radius: 12px;
+  overflow: visible !important;
+  margin-bottom: 70px;
 }
 
-.nq-tile-feed_on_scroll.nq-visible {
-  opacity: 1;
+.nq-tile-feed_on_scroll .nq-video-el {
+  border-radius: 12px;
+  aspect-ratio: 9/16;
+  height: 100%;
 }
 
-.nq-tile-feed_on_scroll .nq-product-info {
+.nq-tile-feed_on_scroll .nq-below-info {
   position: absolute;
-  bottom: -78px;
+  bottom: -68px;
   left: 0;
   right: 0;
-  padding: 8px 6px 4px;
-  background: transparent;
 }
 
-.nq-tile-feed_on_scroll .nq-product-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #111;
-  margin: 0 0 4px;
+/* Fade in on scroll */
+.nq-scroll-fade {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
 }
-
-.nq-tile-feed_on_scroll .nq-product-price {
-  font-size: 13px;
-  font-weight: 600;
-  color: #111;
-  margin: 0;
+.nq-scroll-fade.nq-visible {
+  opacity: 1;
+  transform: translateY(0);
 }
-
 
 /* ============================================================
-   TILE TYPE 10 — Grid Theme Border
+   TILE 10 — Grid Theme Border
+   Multi-row grid, rounded corners, coloured border, no product
    ============================================================ */
+.nq-tile-type-grid_theme_border .nq-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
 
 .nq-tile-grid_theme_border {
-  width: 200px;
-  height: 340px;
-  border: 3px solid #111;
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 9/16;
+  border-radius: 16px;
+  overflow: hidden !important;
+}
+
+.nq-tile-grid_theme_border .nq-video-el {
   border-radius: 14px;
-  overflow: visible;
-  margin-bottom: 80px;
+  aspect-ratio: 9/16;
+  height: 100%;
 }
-
-.nq-tile-grid_theme_border .nq-product-info {
-  position: absolute;
-  bottom: -78px;
-  left: 0;
-  right: 0;
-  padding: 8px 6px 4px;
-}
-
-.nq-tile-grid_theme_border .nq-product-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #111;
-  margin: 0 0 4px;
-}
-
-.nq-tile-grid_theme_border .nq-product-price {
-  font-size: 13px;
-  font-weight: 600;
-  color: #111;
-  margin: 0;
-}
-
 
 /* ============================================================
-   TILE TYPE 11 — Grid No Border
+   TILE 11 — Grid No Border
+   Dense multi-row grid, no border-radius, no product
    ============================================================ */
-
-.nq-tile-grid_no_border {
-  width: 200px;
-  height: 340px;
-  border-radius: 0;
-  overflow: visible;
-  margin-bottom: 80px;
-}
-
-.nq-tile-grid_no_border .nq-product-info {
-  position: absolute;
-  bottom: -78px;
-  left: 0;
-  right: 0;
-  padding: 8px 6px 4px;
-}
-
-.nq-tile-grid_no_border .nq-product-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #111;
-  margin: 0 0 4px;
-}
-
-.nq-tile-grid_no_border .nq-product-price {
-  font-size: 13px;
-  font-weight: 600;
-  color: #111;
-  margin: 0;
-}
-
-
-/* ============================================================
-   TILE TYPE 12 — 3D Navigation
-   ============================================================ */
-
-.nq-tile-3d_navigation {
-  width: 200px;
-  height: 340px;
-  perspective: 800px;
-  transform-style: preserve-3d;
-  transition: transform 0.4s ease;
-}
-
-.nq-tile-3d_navigation:hover {
-  transform: rotateY(-8deg) scale(1.04);
-}
-
-.nq-tile-3d_navigation .nq-overlay {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 4;
-  padding: 10px;
-  background: rgba(0,0,0,0.45);
-  backdrop-filter: blur(4px);
-  border-radius: 0 0 14px 14px;
-  display: flex;
-  flex-direction: column;
+.nq-tile-type-grid_no_border .nq-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
 }
 
-.nq-tile-3d_navigation .nq-overlay-title {
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  margin: 0;
+.nq-tile-grid_no_border {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 9/16;
+  border-radius: 0 !important;
+  overflow: hidden !important;
 }
 
-.nq-tile-3d_navigation .nq-overlay-price {
-  color: #fff;
-  font-size: 12px;
-  margin: 0;
+.nq-tile-grid_no_border .nq-video-el {
+  border-radius: 0;
+  aspect-ratio: 9/16;
+  height: 100%;
 }
-
-.nq-tile-3d_navigation .nq-shop-now {
-  display: inline-block;
-  margin-top: 4px;
-  padding: 5px 12px;
-  border-radius: 20px;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  text-decoration: none;
-  text-align: center;
-  letter-spacing: 0.5px;
-}
-
 
 /* ============================================================
-   SHOP NOW button — base style
+   TILE 12 — 3D Navigation / Coverflow
+   Center card large, side cards tilted and smaller
    ============================================================ */
-.nq-shop-now {
-  display: inline-block;
-  padding: 6px 14px;
-  border-radius: 20px;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  text-decoration: none;
-  letter-spacing: 0.5px;
-  text-align: center;
-  margin-top: 6px;
-  transition: opacity 0.2s;
+.nq-3d-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px 0;
+  overflow: hidden;
 }
-.nq-shop-now:hover { opacity: 0.85; }
 
+.nq-3d-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 420px; /* taller than cards for scale headroom */
+  flex: 1;
+  perspective: 1000px;
+  transform-style: preserve-3d;
+}
+
+.nq-tile-3d_navigation {
+  position: absolute;
+  border-radius: 16px;
+  flex-shrink: 0;
+  transform-origin: center center;
+  /* JS fills transform/opacity/z-index */
+}
+
+.nq-3d-prev,
+.nq-3d-next {
+  background: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 20;
+  transition: box-shadow 0.2s;
+}
+.nq-3d-prev:hover,
+.nq-3d-next:hover { box-shadow: 0 4px 18px rgba(0,0,0,0.24); }
+
+/* ============================================================
+   TILE 13 — Minimal
+   Plain horizontal carousel, no product info
+   ============================================================ */
+.nq-tile-minimal {
+  border-radius: 12px;
+}
+
+/* ============================================================
+   GRID wrapper (shared for tiles 9, 10, 11)
+   ============================================================ */
+.nq-grid {
+  width: 100%;
+}
 
 /* ============================================================
    POPUP — Fullscreen Video Player
@@ -621,8 +505,8 @@
 .nq-popup-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.78);
-  backdrop-filter: blur(6px);
+  background: rgba(0,0,0,0.80);
+  backdrop-filter: blur(8px);
 }
 
 .nq-popup-content {
@@ -630,23 +514,7 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 16px;
-}
-
-.nq-popup-video-wrap {
-  position: relative;
-  width: 340px;
-  max-height: 90vh;
-  border-radius: 16px;
-  overflow: hidden;
-  background: #000;
-}
-
-.nq-popup-video {
-  width: 100%;
-  max-height: 90vh;
-  object-fit: contain;
-  display: block;
+  gap: 14px;
 }
 
 .nq-popup-close {
@@ -668,7 +536,7 @@
   backdrop-filter: blur(4px);
   transition: background 0.2s;
 }
-.nq-popup-close:hover { background: rgba(255,255,255,0.3); }
+.nq-popup-close:hover { background: rgba(255,255,255,0.28); }
 
 .nq-popup-prev,
 .nq-popup-next {
@@ -688,9 +556,24 @@
   flex-shrink: 0;
 }
 .nq-popup-prev:hover,
-.nq-popup-next:hover { background: rgba(255,255,255,0.3); }
+.nq-popup-next:hover { background: rgba(255,255,255,0.28); }
 
-/* Product card inside popup */
+.nq-popup-video-wrap {
+  position: relative;
+  width: 340px;
+  max-height: 88vh;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+}
+
+.nq-popup-video {
+  width: 100%;
+  max-height: 88vh;
+  object-fit: contain;
+  display: block;
+}
+
 .nq-popup-product {
   position: absolute;
   bottom: 0;
@@ -702,13 +585,13 @@
 
 .nq-popup-product-card {
   background: rgba(255,255,255,0.12);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
   border-radius: 12px;
   padding: 10px;
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.18);
 }
 
 .nq-popup-product-card img {
@@ -719,17 +602,13 @@
   flex-shrink: 0;
 }
 
-.nq-popup-product-info {
-  flex: 1;
-  min-width: 0;
-}
+.nq-popup-product-info { flex: 1; min-width: 0; }
 
 .nq-popup-product-title {
   font-size: 13px;
   font-weight: 600;
   color: #fff;
   margin: 0 0 3px;
-  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -737,58 +616,61 @@
 
 .nq-popup-product-price {
   font-size: 13px;
-  color: #fff;
+  color: #ddd;
   margin: 0;
-  font-weight: 500;
 }
 
-.nq-popup-product-card .nq-shop-now {
+.nq-popup-shop-btn {
   flex-shrink: 0;
-  font-size: 11px;
-  padding: 6px 12px;
+  display: inline-block;
+  padding: 7px 14px;
   border-radius: 20px;
   color: #fff;
-  text-decoration: none;
+  font-size: 11px;
   font-weight: 700;
+  text-decoration: none;
   letter-spacing: 0.5px;
   white-space: nowrap;
+  transition: opacity 0.2s;
 }
-
+.nq-popup-shop-btn:hover { opacity: 0.82; }
 
 /* ============================================================
-   MOBILE — Responsive
+   MOBILE — Responsive tweaks
    ============================================================ */
 @media (max-width: 768px) {
-  .nq-section {
-    padding: 16px 12px;
-  }
+  .nq-section { padding-left: 12px !important; padding-right: 12px !important; }
 
-  /* 3-tile: 3 cards visible on mobile */
+  /* 3-tile: 3 cards across on mobile */
   .nq-tile-img_transparent_text_overlay_3,
   .nq-tile-img_opaque_text_overlay_3,
   .nq-tile-product_below_3 {
-    width: calc(33vw - 12px);
-    height: calc((33vw - 12px) * 1.7);
+    width: calc(33vw - 10px) !important;
+    height: calc((33vw - 10px) * 1.72) !important;
   }
 
-  /* 2-tile: 2 cards visible on mobile */
+  /* 2-tile: 2 cards across on mobile */
   .nq-tile-img_transparent_text_overlay_2,
   .nq-tile-product_below_2 {
-    width: calc(50vw - 18px);
-    height: calc((50vw - 18px) * 1.7);
+    width: calc(50vw - 14px) !important;
+    height: calc((50vw - 14px) * 1.72) !important;
   }
 
+  /* Story circles smaller on mobile */
   .nq-tile-story_format {
-    width: 80px;
-    height: 80px;
+    width: 82px !important;
+    height: 82px !important;
   }
 
-  .nq-popup-video-wrap {
-    width: 92vw;
+  /* Grid tiles: 2 columns on mobile */
+  .nq-tile-type-grid_theme_border .nq-grid,
+  .nq-tile-type-grid_no_border .nq-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 
+  /* 3D popup arrow buttons hidden on mobile */
   .nq-popup-prev,
-  .nq-popup-next {
-    display: none;
-  }
+  .nq-popup-next { display: none; }
+
+  .nq-popup-video-wrap { width: 92vw; }
 }
