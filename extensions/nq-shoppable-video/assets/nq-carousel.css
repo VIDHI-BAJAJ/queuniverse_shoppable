@@ -225,3 +225,10 @@
   .nq-card { min-width: 160px; height: 260px; }
   .nq-heading { font-size: 24px; }
 }
+
+  @media (max-width: 768px) {
+    .nq-heading { font-size: {{ block.settings.heading_size_mobile }}px !important; }
+  }
+  .nq-section { padding: {{ block.settings.vertical_padding }}px {{ block.settings.horizontal_padding }}px; }
+  .nq-card { min-width: {{ block.settings.card_width }}px; height: {{ block.settings.card_height }}px; }
+  .nq-shop-now { background: {{ block.settings.shop_btn_color }}; }
