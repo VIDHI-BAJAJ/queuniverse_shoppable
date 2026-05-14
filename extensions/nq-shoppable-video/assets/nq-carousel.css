@@ -6,7 +6,12 @@
 .nq-section {
   position: relative;
   box-sizing: border-box;
-  overflow: hidden; /* clips 3D track bleed */
+  /* overflow: hidden removed — would clip product info below cards */
+}
+
+/* Only clip overflow for 3D navigation */
+.nq-tile-type-3d_navigation {
+  overflow: hidden;
 }
 
 .nq-heading {
@@ -31,10 +36,12 @@
   display: flex;
   gap: 12px;
   overflow-x: auto;
+  overflow-y: visible;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  padding-bottom: 4px;
+  padding-bottom: 92px;
+  margin-bottom: -92px;
 }
 .nq-carousel::-webkit-scrollbar { display: none; }
 
@@ -599,61 +606,84 @@
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 10px;
   z-index: 5;
+  border-radius: 0 0 16px 16px;
+  overflow: hidden;
 }
 
+/* Popup product card — matches Whatmore style */
 .nq-popup-product-card {
-  background: rgba(255,255,255,0.12);
-  backdrop-filter: blur(14px);
-  border-radius: 12px;
-  padding: 10px;
+  background: rgba(255,255,255,0.13);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 12px 12px 0 0;
+  padding: 10px 12px;
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-bottom: none;
 }
 
-.nq-popup-product-card img {
-  width: 52px;
-  height: 52px;
+.nq-popup-thumb {
+  width: 56px;
+  height: 56px;
   object-fit: cover;
   border-radius: 8px;
   flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.2);
 }
 
-.nq-popup-product-info { flex: 1; min-width: 0; }
+.nq-popup-product-info {
+  flex: 1;
+  min-width: 0;
+}
 
 .nq-popup-product-title {
   font-size: 13px;
   font-weight: 600;
   color: #fff;
-  margin: 0 0 3px;
-  white-space: nowrap;
+  margin: 0 0 4px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .nq-popup-product-price {
-  font-size: 13px;
-  color: #ddd;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
+.nq-popup-orig-price {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.55);
+  text-decoration: line-through;
+}
+
+/* SHOP NOW — full-width bar at bottom of popup */
 .nq-popup-shop-btn {
-  flex-shrink: 0;
-  display: inline-block;
-  padding: 7px 14px;
-  border-radius: 20px;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 0;
+  text-align: center;
   color: #fff;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
+  letter-spacing: 1.5px;
   text-decoration: none;
-  letter-spacing: 0.5px;
-  white-space: nowrap;
+  border-radius: 0 0 16px 16px;
   transition: opacity 0.2s;
 }
-.nq-popup-shop-btn:hover { opacity: 0.82; }
+.nq-popup-shop-btn:hover { opacity: 0.88; }
 
 /* ============================================================
    MOBILE — Responsive tweaks

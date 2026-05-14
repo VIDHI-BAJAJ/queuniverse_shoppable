@@ -264,23 +264,29 @@
 
   /* ───────────────────────── Helpers ───────────────────────── */
   function fmt(cents) {
-    return (parseInt(cents) / 100).toLocaleString('en-IN');
+    // cents are stored as paise (price * 100), so divide back
+    return (Math.round(parseInt(cents)) / 100).toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0});
   }
 
   function fetchProduct(productId) {
+    // Extract numeric ID from GID or use as-is if already numeric
     var id = productId.replace("gid://shopify/Product/", "");
-    return fetch("/products.json?ids=" + id)
+    // Use /products.json with handle search as fallback, primary: storefront by id
+    return fetch("/products.json?limit=1&ids=" + id)
       .then(function(r) { return r.json(); })
       .then(function(d) {
-        if (!d.products || !d.products[0] || !d.products[0].variants[0]) return null;
-        var pr = d.products[0];
-        var v  = pr.variants[0];
+        var pr = d.products && d.products[0];
+        if (!pr || !pr.variants || !pr.variants[0]) return null;
+        var v = pr.variants[0];
+        // Shopify REST API returns price as string e.g. "1899.00"
+        var price = Math.round(parseFloat(v.price) * 100);
+        var comparePrice = v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null;
         return {
           title:           pr.title,
-          price:           v.price * 100,
-          compare_at_price: v.compare_at_price ? v.compare_at_price * 100 : null,
+          price:           price,
+          compare_at_price: comparePrice,
           handle:          pr.handle,
-          image:           pr.images[0] ? pr.images[0].src : null
+          image:           pr.images && pr.images[0] ? pr.images[0].src : null
         };
       }).catch(function() { return null; });
   }
@@ -394,15 +400,23 @@
     if (video.product_ids && video.product_ids.length) {
       fetchProduct(video.product_ids[0]).then(function(p) {
         if (!p) return;
+
+        // Build price line with compare-at if available
+        var priceHtml = '&#8377;' + fmt(p.price);
+        var compareHtml = '';
+        if (p.compare_at_price && p.compare_at_price > p.price) {
+          compareHtml = '<span class="nq-popup-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
+        }
+
         pd.innerHTML =
           '<div class="nq-popup-product-card">' +
-          (p.image ? '<img src="' + p.image + '">' : '') +
-          '<div class="nq-popup-product-info">' +
-            '<p class="nq-popup-product-title">' + p.title + '</p>' +
-            '<p class="nq-popup-product-price">&#8377;' + fmt(p.price) + '</p>' +
+            (p.image ? '<img src="' + p.image + '" class="nq-popup-thumb">' : '') +
+            '<div class="nq-popup-product-info">' +
+              '<p class="nq-popup-product-title">' + p.title + '</p>' +
+              '<p class="nq-popup-product-price">' + priceHtml + ' ' + compareHtml + '</p>' +
+            '</div>' +
           '</div>' +
-          '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '">SHOP NOW</a>' +
-          '</div>';
+          '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '">SHOP NOW</a>';
       });
     }
   }
