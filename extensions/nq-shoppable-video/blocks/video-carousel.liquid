@@ -89,8 +89,22 @@
   productId = "{{ product.id }}";
   {% endif %}
 
-  /* ── CACHE: 5 minute TTL so view counts stay fresh ── */
-  var CACHE_KEY = "nq_v3_" + shop + (productId ? "_pdp_" + productId : "_home");
+  /* ── CACHE: v4 key — busts all old v1/v2/v3 stale data automatically ── */
+  // Clear any old version keys left in localStorage
+  (function() {
+    try {
+      var keysToRemove = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && (k.indexOf("nq_v1_") === 0 || k.indexOf("nq_v2_") === 0 || k.indexOf("nq_v3_") === 0)) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(function(k) { localStorage.removeItem(k); });
+    } catch(e) {}
+  })();
+
+  var CACHE_KEY = "nq_v4_" + shop + (productId ? "_pdp_" + productId : "_home");
   var rendered  = false;
 
   function readCache() {
@@ -219,18 +233,26 @@
     card.className = "nq-card nq-tile-" + tileType;
 
     var videoEl = document.createElement("video");
-    videoEl.dataset.src = video.r2_url;
     videoEl.muted       = true;
     videoEl.loop        = true;
     videoEl.playsInline = true;
-    videoEl.preload     = "none";
     videoEl.className   = "nq-video-el";
     // Show thumbnail as poster so card never shows black while loading
-    if (video.thumbnail_url) videoEl.poster = video.thumbnail_url;
+    if (video.thumbnail_url) {
+      videoEl.poster = video.thumbnail_url;
+      videoEl.preload = "none"; // thumbnail covers, lazy load video
+    } else {
+      // No thumbnail — preload metadata so first frame shows
+      videoEl.preload = "metadata";
+      videoEl.src = video.r2_url; // load immediately so first frame appears
+    }
+    videoEl.dataset.src = video.r2_url;
 
     card.onmouseenter = function() {
-      if (!videoEl.src && videoEl.dataset.src) { videoEl.src = videoEl.dataset.src; }
-      videoEl.play();
+      if (videoEl.dataset.src && videoEl.src !== videoEl.dataset.src && !videoEl.src.includes(videoEl.dataset.src.split("/").pop())) {
+        videoEl.src = videoEl.dataset.src;
+      }
+      videoEl.play().catch(function(){});
     };
     card.onmouseleave = function() { videoEl.pause(); videoEl.currentTime = 0; };
     card.onclick = function() { nqOpenPopup(blockId, index); };
@@ -238,12 +260,14 @@
     if ("IntersectionObserver" in window) {
       (new IntersectionObserver(function(entries, obs) {
         entries.forEach(function(e) {
-          if (e.isIntersecting && !videoEl.src && videoEl.dataset.src) {
-            videoEl.src = videoEl.dataset.src;
+          if (e.isIntersecting) {
+            if (videoEl.dataset.src && !videoEl.src) {
+              videoEl.src = videoEl.dataset.src;
+            }
             obs.unobserve(e.target);
           }
         });
-      }, { rootMargin: "300px" })).observe(card);
+      }, { rootMargin: "200px" })).observe(card);
     } else {
       videoEl.src = video.r2_url;
     }
@@ -674,7 +698,7 @@
   var shop = "{{ shop.permanent_domain }}";
   // Keep-warm pings homepage context — uses correct cache key matching the carousel
   var url  = API + "?shop=" + shop + "&context=home";
-  var CACHE_KEY = "nq_v3_" + shop + "_home";
+  var CACHE_KEY = "nq_v4_" + shop + "_home";
 
   function ping() {
     fetch(url, { keepalive: true })

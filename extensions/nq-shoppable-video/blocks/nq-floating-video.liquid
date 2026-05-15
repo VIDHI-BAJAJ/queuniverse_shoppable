@@ -35,7 +35,7 @@
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var videos = data.videos || [];
-      if (!videos.length) return; // no video for this product — stay hidden
+      if (!videos.length) return; 
 
       // Load first video
       videoEl.src = videos[0].r2_url;
