@@ -127,8 +127,27 @@
   }
 
   function renderVideos(data) {
-    allVideos = (data && data.videos) ? data.videos : [];
-    console.log("[NQ " + blockId + "] Rendering", allVideos.length, "videos");
+    var raw = (data && data.videos) ? data.videos : [];
+
+    // Client-side filter: homepage shows only show_on=home, PDP shows only matching product
+    if (!productId) {
+      // Homepage — filter to videos marked for homepage
+      allVideos = raw.filter(function(v) {
+        var showOn = Array.isArray(v.show_on) ? v.show_on : [];
+        return showOn.includes("home") || showOn.indexOf("home") >= 0;
+      });
+      // If none have show_on set (old data), show all as fallback
+      if (allVideos.length === 0) allVideos = raw;
+    } else {
+      // PDP — filter to videos tagged with this product
+      var gid = "gid://shopify/Product/" + productId;
+      allVideos = raw.filter(function(v) {
+        var ids = Array.isArray(v.product_ids) ? v.product_ids : [];
+        return ids.indexOf(gid) >= 0 || ids.indexOf(productId) >= 0;
+      });
+    }
+
+    console.log("[NQ " + blockId + "] Rendering", allVideos.length, "of", raw.length, "videos");
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (!cont) { console.log("[NQ] Container not found!"); return; }
     cont.innerHTML = "";
