@@ -2,10 +2,81 @@ import { useLoaderData, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
 import { useState, useMemo } from "react";
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, 
-} from "recharts";
+// No external chart library needed - using inline SVG
+ 
+ 
+// Pure SVG line chart — no external dependencies
+function NQLineChart({ data, metric }) {
+  const W = 900, H = 240, PL = 48, PR = 20, PT = 10, PB = 36;
+  const iW = W - PL - PR;
+  const iH = H - PT - PB;
+ 
+  // Build full date range with zeros
+  const COLORS = { views: "#485861", clicks: "#ec4899", orders: "#10b981" };
+  const color = COLORS[metric] || "#485861";
+ 
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: "60px 0", color: "#94a3b8" }}>
+        <div style={{ fontSize: "32px", marginBottom: "8px" }}>📊</div>
+        <p style={{ margin: 0, fontSize: "13px" }}>No data yet — engage with videos to see trends</p>
+      </div>
+    );
+  }
+ 
+  const values = data.map(d => d[metric] || 0);
+  const maxVal = Math.max(...values, 1);
+  const minVal = 0;
+ 
+  const pts = data.map((d, i) => {
+    const x = PL + (i / Math.max(data.length - 1, 1)) * iW;
+    const y = PT + iH - ((d[metric] || 0) / maxVal) * iH;
+    return [x, y];
+  });
+ 
+  const pathD = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(" ");
+  const fillD = pathD + ` L${pts[pts.length-1][0]},${PT+iH} L${pts[0][0]},${PT+iH} Z`;
+ 
+  // Y axis ticks
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => ({
+    val: Math.round(maxVal * t),
+    y: PT + iH - t * iH,
+  }));
+ 
+  // X axis: show ~6 labels
+  const step = Math.max(1, Math.floor(data.length / 6));
+  const xTicks = data.filter((_, i) => i % step === 0 || i === data.length - 1);
+ 
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "260px", overflow: "visible" }}>
+      {/* Grid lines */}
+      {yTicks.map((t, i) => (
+        <g key={i}>
+          <line x1={PL} y1={t.y} x2={W - PR} y2={t.y} stroke="#f0f0ee" strokeWidth="1" />
+          <text x={PL - 6} y={t.y + 4} textAnchor="end" fontSize="10" fill="#94a3b8">{t.val}</text>
+        </g>
+      ))}
+      {/* Area fill */}
+      <path d={fillD} fill={color} fillOpacity="0.08" />
+      {/* Line */}
+      <path d={pathD} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {/* Dots on data points */}
+      {pts.map((p, i) => values[i] > 0 && (
+        <circle key={i} cx={p[0]} cy={p[1]} r="3" fill={color} />
+      ))}
+      {/* X axis labels */}
+      {xTicks.map((d, i) => {
+        const idx = data.indexOf(d);
+        const x = PL + (idx / Math.max(data.length - 1, 1)) * iW;
+        const label = new Date(d.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+        return <text key={i} x={x} y={H - 4} textAnchor="middle" fontSize="10" fill="#94a3b8">{label}</text>;
+      })}
+      {/* Axes */}
+      <line x1={PL} y1={PT} x2={PL} y2={PT + iH} stroke="#e2e8f0" strokeWidth="1" />
+      <line x1={PL} y1={PT + iH} x2={W - PR} y2={PT + iH} stroke="#e2e8f0" strokeWidth="1" />
+    </svg>
+  );
+}
  
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -55,7 +126,7 @@ export const loader = async ({ request }) => {
     const watchHours       = (totalWatchSec / 3600).toFixed(1);
     const impressionSales  = totalRevenue;
  
-    // Fallback: if no video_events yet, build chart from videos.views spread over created_at dates
+    // Build chart from video_events if available, else show totalViews on today
     let finalChartData = chartData;
     if (finalChartData.length === 0 && totalViews > 0) {
       // No events table yet — show total views on today's date so graph isn't empty
@@ -81,6 +152,7 @@ export const loader = async ({ request }) => {
     };
   }
 };
+ 
  
 const RANGES = [
   { label: "Last 7 days",  days: 7 },
@@ -151,6 +223,7 @@ export default function Index() {
     page: {
       padding: "28px 32px",
       background: "#f8f9fb",
+      fontFamily: "'Inter', system-ui, sans-serif" ,
       minHeight: "100vh",
     },
     header: {
@@ -241,7 +314,7 @@ export default function Index() {
 
   const activeMetricObj = METRICS.find(m => m.key === activeMetric);
  
-  return (
+ return (
     <div style={s.page}>
       {/* Header */}
       <div style={s.header}>
@@ -293,93 +366,13 @@ export default function Index() {
           <h2 style={s.chartTitle}>Performance Trend</h2>
           <div style={s.metricBtns}>
             {METRICS.map(m => (
-              <button
-                key={m.key}
-                style={s.metricBtn(activeMetric === m.key, m.color)}
-                onClick={() => setActiveMetric(m.key)}
-              >
+              <button key={m.key} style={s.metricBtn(activeMetric === m.key, m.color)} onClick={() => setActiveMetric(m.key)}>
                 {m.label}
               </button>
             ))}
           </div>
         </div>
-        {(() => {
-          // Always build a full date-range skeleton so axes always show
-          const buildDisplayData = () => {
-            let from, to;
-            if (customFrom && customTo) {
-              from = new Date(customFrom); to = new Date(customTo);
-            } else {
-              const days = RANGES[activeRange].days;
-              to = new Date(today);
-              from = days ? new Date(today) : null;
-              if (from && days) from.setDate(from.getDate() - days + 1);
-              if (!from) {
-                // All time: use last 30 days as skeleton minimum
-                from = new Date(today);
-                from.setDate(from.getDate() - 29);
-              }
-            }
-            // Build every date in range with zero fallback
-            const map = {};
-            filteredChart.forEach(r => { map[r.date] = r; });
-            const result = [];
-            const cur = new Date(from);
-            while (cur <= to) {
-              const key = cur.toISOString().slice(0, 10);
-              result.push(map[key] || { date: key, views: 0, clicks: 0, orders: 0 });
-              cur.setDate(cur.getDate() + 1);
-            }
-            return result;
-          };
- 
-          const displayData = buildDisplayData();
-          const hasRealData = filteredChart.length > 0;
- 
-          return (
-            <>
-              {!hasRealData && (
-                <p style={{ textAlign: "center", fontSize: "12px", color: "#b0b0aa", marginBottom: "4px", marginTop: 0 }}>
-                  No engagement data yet — axes show your selected date range
-                </p>
-              )}
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={displayData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0ee" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 11, fill: "#94a3b8" }}
-                    tickFormatter={d => {
-                      const dt = new Date(d);
-                      return dt.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-                    }}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: "#94a3b8" }}
-                    allowDecimals={false}
-                    domain={[0, hasRealData ? "auto" : 10]}
-                    tickCount={hasRealData ? undefined : 5}
-                  />
-                  <Tooltip
-                    contentStyle={{ borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "13px" }}
-                    labelFormatter={d => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
-                    formatter={(value) => [value, activeMetricObj.label]}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey={activeMetric}
-                    stroke={hasRealData ? "#485861" : "#e2e8f0"}
-                    strokeWidth={hasRealData ? 2.5 : 1.5}
-                    strokeDasharray={hasRealData ? "0" : "4 4"}
-                    dot={false}
-                    activeDot={hasRealData ? { r: 5 } : false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </>
-          );
-        })()}
+        <NQLineChart data={filteredChart} metric={activeMetric} />
       </div>
  
       {/* Engagement Metrics */}
