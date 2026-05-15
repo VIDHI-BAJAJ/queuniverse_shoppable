@@ -88,7 +88,8 @@
      2. Always fetch fresh from API → update cache + allVideos
      3. Retry up to 3x on failure, show refresh link if all fail
   ─────────────────────────────────────────────────────────────*/
-  var CACHE_KEY = "nq_v3_" + shop;
+  // Separate cache for homepage vs PDP so they don't overwrite each other
+  var CACHE_KEY = "nq_v3_" + shop + (productId ? "_pdp_" + productId : "_home");
   var rendered  = false;
 
   function readCache() {
@@ -144,7 +145,12 @@
   }
 
   // Step 2: fetch fresh data
-  var apiURL  = API + "?shop=" + shop; // no page filter — show all live videos
+  // Detect if we are on a product page and pass product_id for PDP filtering
+  var productId = null;
+  {% if product %}
+  productId = "{{ product.id }}";
+  {% endif %}
+  var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
   var giveUp  = setTimeout(function() {
     if (!rendered) {
       var cont = document.getElementById("nq-carousel-" + blockId);
