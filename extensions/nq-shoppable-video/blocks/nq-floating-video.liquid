@@ -66,43 +66,75 @@
     };
   }
 
-  // Hide when Add to Cart is clicked
+  // Hide floating video when Add to Cart button comes into view
   function hideFloat() {
     wrap.classList.remove("nq-float-visible");
     setTimeout(function() { wrap.style.display = "none"; }, 300);
     videoEl.pause();
   }
 
-  // Listen for Add to Cart button clicks
-  document.addEventListener("click", function(e) {
-    var target = e.target;
-    // Check if clicked element or its parent is an add to cart button
-    var addToCart = target.closest
-      ? target.closest('[name="add"], [id*="add-to-cart"], .add-to-cart, [data-testid*="add-to-cart"]')
-      : null;
+  function showFloat() {
+    wrap.style.display = "block";
+    setTimeout(function() { wrap.classList.add("nq-float-visible"); }, 100);
+    videoEl.play().catch(function(){});
+  }
 
-    if (!addToCart) {
-      // Fallback: check by text content
-      var text = (target.textContent || "").toLowerCase().trim();
-      var parentText = (target.parentElement && target.parentElement.textContent || "").toLowerCase().trim();
-      if (text.includes("add to cart") || text.includes("buy now") ||
-          parentText.includes("add to cart")) {
-        addToCart = target;
+  // Watch Add to Cart / Buy Now buttons using IntersectionObserver
+  // When button is VISIBLE on screen → hide float
+  // When button scrolls OUT of view → show float again
+  function watchCartButtons() {
+    var selectors = [
+      '[name="add"]',
+      '[id*="add-to-cart"]',
+      '[id*="AddToCart"]',
+      '.add-to-cart',
+      '[data-testid*="add-to-cart"]',
+      'button[type="submit"].product-form__cart-submit',
+      '.product-form__submit',
+      '#ProductSubmitButton',
+      '.btn--add-to-cart',
+      '[data-add-to-cart]'
+    ];
+
+    var cartBtn = null;
+    for (var i = 0; i < selectors.length; i++) {
+      cartBtn = document.querySelector(selectors[i]);
+      if (cartBtn) break;
+    }
+
+    // Fallback: find by text
+    if (!cartBtn) {
+      var buttons = document.querySelectorAll("button, input[type=submit]");
+      for (var j = 0; j < buttons.length; j++) {
+        var txt = (buttons[j].textContent || buttons[j].value || "").toLowerCase();
+        if (txt.includes("add to cart") || txt.includes("buy now") || txt.includes("sold out")) {
+          cartBtn = buttons[j];
+          break;
+        }
       }
     }
 
-    if (addToCart) {
-      hideFloat();
-    }
-  });
+    if (!cartBtn) return; // no cart button found
 
-  // Also listen for form submissions (add to cart form)
-  document.addEventListener("submit", function(e) {
-    var form = e.target;
-    if (form && (form.action || "").includes("/cart/add")) {
-      hideFloat();
+    if ("IntersectionObserver" in window) {
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            // Cart button visible → hide floating video
+            hideFloat();
+          } else {
+            // Cart button out of view → show floating video
+            showFloat();
+          }
+        });
+      }, { threshold: 0.1 });
+
+      observer.observe(cartBtn);
     }
-  });
+  }
+
+  // Start watching after video loads
+  setTimeout(watchCartButtons, 1000);
 
 })();
 </script>
