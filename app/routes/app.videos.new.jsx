@@ -1,4 +1,4 @@
-import { Form, useActionData, useNavigation, Link, useNavigate } from "react-router";
+import { Form, useActionData, useNavigation, useNavigate } from "react-router";
 import { useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
@@ -70,92 +70,113 @@ export default function NewVideo() {
   const navigate = useNavigate();
   const isLoading = navigation.state === "submitting";
 
+  const C = {
+    bg: "#f8f9fb", card: "#ffffff", border: "#f0f0ee",
+    accent: "#485861", text: "#0a0a0a", muted: "#9a9a93",
+  };
+
   useEffect(() => {
     if (actionData?.success && actionData?.videoId) {
-      navigate(`/app/videos/${actionData.videoId}`);
+      navigate(`/app/videos`);
     }
   }, [actionData]);
 
   return (
-    <div style={{ padding: "24px", maxWidth: "560px", fontFamily: "sans-serif" }}>
-      <Link to="/app/videos" style={{ color: "#008060", textDecoration: "none", fontSize: "14px" }}>
-        ← Back to Videos
-      </Link>
+    <div style={{ padding: "28px 32px", background: C.bg, minHeight: "100vh", fontFamily: "system-ui, sans-serif" }}>
 
-      <h1 style={{ marginTop: "16px", marginBottom: "4px", fontSize: "24px" }}>Import Video</h1>
-      <p style={{ color: "#6b7280", marginTop: "0", marginBottom: "24px", fontSize: "14px" }}>
-        Paste a direct MP4 link to import your video
-      </p>
-
-      {actionData?.error && (
-        <div style={{
-          background: "#fef2f2", border: "1px solid #fca5a5",
-          padding: "12px 16px", borderRadius: "8px",
-          color: "#dc2626", marginBottom: "20px", fontSize: "14px"
+      {/* Back button — navigate instead of Link to fix the broken button issue */}
+      <button
+        onClick={() => navigate("/app/videos")}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          color: C.accent, fontSize: "14px", fontWeight: "500",
+          padding: "0", marginBottom: "20px", display: "flex", alignItems: "center", gap: "4px"
         }}>
-          ❌ {actionData.error}
-        </div>
-      )}
+        ← Back to Videos
+      </button>
 
-      <Form method="post">
-        <div style={{ marginBottom: "20px" }}>
-          <label style={{ display: "block", fontWeight: "600", marginBottom: "6px", fontSize: "14px" }}>
-            Video Title
-          </label>
-          <input
-            name="title"
-            type="text"
-            placeholder="e.g. Summer Collection Reel"
-            style={{
-              width: "100%", padding: "10px 14px",
-              border: "1.5px solid #e5e7eb", borderRadius: "8px",
-              fontSize: "14px", outline: "none", boxSizing: "border-box"
-            }}
-          />
-        </div>
+      <div style={{
+        background: C.card, borderRadius: "10px", padding: "32px",
+        maxWidth: "560px", border: `1px solid ${C.border}`, borderTop: `2px solid ${C.accent}`,
+      }}>
+        <h1 style={{ marginTop: 0, marginBottom: "4px", fontSize: "22px", fontWeight: "600", color: C.text }}>
+          Import Video
+        </h1>
+        <p style={{ color: C.muted, marginTop: "0", marginBottom: "28px", fontSize: "14px" }}>
+          Paste a direct MP4 link to import your video
+        </p>
 
-        <div style={{ marginBottom: "24px" }}>
-          <label style={{ display: "block", fontWeight: "600", marginBottom: "6px", fontSize: "14px" }}>
-            Video URL <span style={{ color: "#dc2626" }}>*</span>
-          </label>
-          <input
-            name="source_url"
-            type="url"
-            required
-            placeholder="https://example.com/video.mp4"
-            style={{
-              width: "100%", padding: "10px 14px",
-              border: "1.5px solid #e5e7eb", borderRadius: "8px",
-              fontSize: "14px", outline: "none", boxSizing: "border-box"
-            }}
-          />
-          <p style={{ margin: "6px 0 0", fontSize: "12px", color: "#6b7280" }}>
-            Must be a direct .mp4 link. Instagram/YouTube links won't work.
-          </p>
-        </div>
-
-        <button
-          type="submit"
-          disabled={isLoading}
-          style={{
-            width: "100%", padding: "12px",
-            background: isLoading ? "#d1fae5" : "#008060",
-            color: isLoading ? "#065f46" : "white",
-            border: "none", borderRadius: "8px",
-            cursor: isLoading ? "not-allowed" : "pointer",
-            fontSize: "15px", fontWeight: "600",
-            transition: "background 0.2s"
-          }}
-        >
-          {isLoading ? "⏳ Uploading to R2..." : "🚀 Import Video"}
-        </button>
-
-        {isLoading && (
-          <p style={{ textAlign: "center", color: "#6b7280", marginTop: "12px", fontSize: "13px" }}>
-            Downloading and uploading video... this may take a minute.
-          </p>
+        {actionData?.error && (
+          <div style={{
+            background: "#fef2f2", border: "1px solid #fca5a5",
+            padding: "12px 16px", borderRadius: "8px",
+            color: "#dc2626", marginBottom: "20px", fontSize: "13px"
+          }}>
+            ❌ {actionData.error}
+          </div>
         )}
-      </Form>
+
+        <Form method="post">
+          <div style={{ marginBottom: "20px" }}>
+            <label style={{ display: "block", fontWeight: "500", marginBottom: "6px", fontSize: "13px", color: C.text }}>
+              Video Title
+            </label>
+            <input
+              name="title"
+              type="text"
+              placeholder="e.g. Summer Collection Reel"
+              style={{
+                width: "100%", padding: "10px 14px",
+                border: `1.5px solid ${C.border}`, borderRadius: "8px",
+                fontSize: "14px", outline: "none", boxSizing: "border-box",
+                color: C.text, background: "#fff"
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: "28px" }}>
+            <label style={{ display: "block", fontWeight: "500", marginBottom: "6px", fontSize: "13px", color: C.text }}>
+              Video URL <span style={{ color: "#dc2626" }}>*</span>
+            </label>
+            <input
+              name="source_url"
+              type="url"
+              required
+              placeholder="https://example.com/video.mp4"
+              style={{
+                width: "100%", padding: "10px 14px",
+                border: `1.5px solid ${C.border}`, borderRadius: "8px",
+                fontSize: "14px", outline: "none", boxSizing: "border-box",
+                color: C.text, background: "#fff"
+              }}
+            />
+            <p style={{ margin: "6px 0 0", fontSize: "12px", color: C.muted }}>
+              Must be a direct .mp4 link. Instagram/YouTube links won't work.
+            </p>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            style={{
+              width: "100%", padding: "12px",
+              background: isLoading ? "#8a9da5" : C.accent,
+              color: "#fff", border: "none", borderRadius: "8px",
+              cursor: isLoading ? "not-allowed" : "pointer",
+              fontSize: "14px", fontWeight: "500",
+              transition: "background 0.2s"
+            }}
+          >
+            {isLoading ? "⏳ Uploading..." : "🚀 Import Video"}
+          </button>
+
+          {isLoading && (
+            <p style={{ textAlign: "center", color: C.muted, marginTop: "12px", fontSize: "13px" }}>
+              Downloading and uploading video... this may take a minute.
+            </p>
+          )}
+        </Form>
+      </div>
     </div>
   );
 }

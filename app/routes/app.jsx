@@ -15,7 +15,6 @@ export default function App() {
       <s-app-nav>
         <s-link href="/app">Dashboard</s-link>
         <s-link href="/app/videos">Videos</s-link>
-        <s-link href="/app/widgets">Widget Settings</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>

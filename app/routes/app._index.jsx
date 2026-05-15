@@ -149,7 +149,7 @@ export default function Index() {
       display: "flex", justifyContent: "space-between",
       alignItems: "center", marginBottom: "28px",
     },
-    title: { margin: 0, fontSize: "26px", fontWeight: "600", color: "#9a9a93" },
+    title: { margin: 0, fontSize: "20px", fontWeight: "500", color: "#000" },
     manageBtn: {
       padding: "10px 22px", background: "#485861", color: "#fff",
       border: "#0a0a0a", borderRadius: "8px", cursor: "pointer",
@@ -208,8 +208,8 @@ export default function Index() {
     metricBtn: (active, color) => ({
       padding: "6px 16px", borderRadius: "20px", border: "2px solid",
       borderColor: active ? color : "#485861",
-      background: active ? color : "#485861",
-      color: active ? "#fff" : "#fff",
+      background: active ? color : "#fff",
+      color: active ? "#fff" : "#485861",
       cursor: "pointer", fontSize: "13px", fontWeight: "500",
       transition: "all 0.15s",
     }),
