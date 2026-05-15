@@ -2,18 +2,7 @@ import { Form, useActionData, useNavigation, useNavigate } from "react-router";
 import { useEffect, useState, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { v4 as uuidv4 } from "uuid";
-
-const getS3 = () =>
-  new S3Client({
-    region: "auto",
-    endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    },
-  });
+import { uploadToR2 } from "../s3.server";
 
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);

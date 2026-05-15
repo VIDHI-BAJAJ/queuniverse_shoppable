@@ -2,19 +2,10 @@ import { useLoaderData, Form, useNavigation, useNavigate, useFetcher } from "rea
 import { useState, useRef, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { v4 as uuidv4 } from "uuid";
+import { uploadToR2 } from "../s3.server";
 
 /* ── S3 / R2 client ── */
-const getS3 = () =>
-  new S3Client({
-    region: "auto",
-    endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    },
-  });
+
 
 /* ── LOADER ── */
 export const loader = async ({ request }) => {
@@ -62,23 +53,15 @@ export const action = async ({ request }) => {
       const response = await fetch(sourceUrl);
       if (!response.ok) throw new Error("Failed to fetch video: " + response.status);
       const buffer = Buffer.from(await response.arrayBuffer());
-      const key = `videos/${uuidv4()}.mp4`;
-      await getS3().send(new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME, Key: key, Body: buffer, ContentType: "video/mp4",
-      }));
-      const r2Url = `${process.env.R2_PUBLIC_URL}/${key}`;
+      const { key, url: r2Url } = await uploadToR2(buffer, "video/mp4");
 
       // Extract thumbnail from uploaded thumbnail blob (sent from client)
       let thumbnailUrl = null;
       const thumbBlob = formData.get("thumbnail");
       if (thumbBlob && thumbBlob.size > 0) {
         const thumbBuffer = Buffer.from(await thumbBlob.arrayBuffer());
-        const thumbKey = `thumbnails/${uuidv4()}.jpg`;
-        await getS3().send(new PutObjectCommand({
-          Bucket: process.env.R2_BUCKET_NAME, Key: thumbKey,
-          Body: thumbBuffer, ContentType: "image/jpeg",
-        }));
-        thumbnailUrl = `${process.env.R2_PUBLIC_URL}/${thumbKey}`;
+        const { url: thumbUrl1 } = await uploadToR2(thumbBuffer, "image/jpeg");
+        thumbnailUrl = thumbUrl1;
       }
 
       const { error } = await supabase.from("videos").insert({
@@ -96,24 +79,15 @@ export const action = async ({ request }) => {
       const title = formData.get("title") || "Untitled Video";
       if (!file || file.size === 0) return { importError: "Please select a video file" };
       const buffer = Buffer.from(await file.arrayBuffer());
-      const ext = file.name.split(".").pop() || "mp4";
-      const key = `videos/${uuidv4()}.${ext}`;
-      await getS3().send(new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME, Key: key, Body: buffer, ContentType: file.type || "video/mp4",
-      }));
-      const r2Url = `${process.env.R2_PUBLIC_URL}/${key}`;
+      const { key, url: r2Url } = await uploadToR2(buffer, file.type || "video/mp4");
 
       // Extract thumbnail from client-captured frame
       let thumbnailUrl = null;
       const thumbBlob2 = formData.get("thumbnail");
       if (thumbBlob2 && thumbBlob2.size > 0) {
         const thumbBuffer2 = Buffer.from(await thumbBlob2.arrayBuffer());
-        const thumbKey2 = `thumbnails/${uuidv4()}.jpg`;
-        await getS3().send(new PutObjectCommand({
-          Bucket: process.env.R2_BUCKET_NAME, Key: thumbKey2,
-          Body: thumbBuffer2, ContentType: "image/jpeg",
-        }));
-        thumbnailUrl = `${process.env.R2_PUBLIC_URL}/${thumbKey2}`;
+        const { url: thumbUrl2 } = await uploadToR2(thumbBuffer2, "image/jpeg");
+        thumbnailUrl = thumbUrl2;
       }
 
       const { error } = await supabase.from("videos").insert({
