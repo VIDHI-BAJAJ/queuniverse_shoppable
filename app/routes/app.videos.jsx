@@ -2,7 +2,6 @@ import { useLoaderData, Form, useNavigation, useNavigate, useFetcher } from "rea
 import { useState, useRef, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
-import { uploadToR2 } from "../s3.server";
 
 /* ── S3 / R2 client ── */
 
@@ -53,14 +52,16 @@ export const action = async ({ request }) => {
       const response = await fetch(sourceUrl);
       if (!response.ok) throw new Error("Failed to fetch video: " + response.status);
       const buffer = Buffer.from(await response.arrayBuffer());
-      const { key, url: r2Url } = await uploadToR2(buffer, "video/mp4");
+      const { uploadToR2: _up1 } = await import("../s3.server.js");
+      const { key, url: r2Url } = await _up1(buffer, "video/mp4");
 
       // Extract thumbnail from uploaded thumbnail blob (sent from client)
       let thumbnailUrl = null;
       const thumbBlob = formData.get("thumbnail");
       if (thumbBlob && thumbBlob.size > 0) {
         const thumbBuffer = Buffer.from(await thumbBlob.arrayBuffer());
-        const { url: thumbUrl1 } = await uploadToR2(thumbBuffer, "image/jpeg");
+        const { uploadToR2: _up2 } = await import("../s3.server.js");
+        const { url: thumbUrl1 } = await _up2(thumbBuffer, "image/jpeg");
         thumbnailUrl = thumbUrl1;
       }
 
@@ -79,14 +80,16 @@ export const action = async ({ request }) => {
       const title = formData.get("title") || "Untitled Video";
       if (!file || file.size === 0) return { importError: "Please select a video file" };
       const buffer = Buffer.from(await file.arrayBuffer());
-      const { key, url: r2Url } = await uploadToR2(buffer, file.type || "video/mp4");
+      const { uploadToR2: _up3 } = await import("../s3.server.js");
+      const { key, url: r2Url } = await _up3(buffer, file.type || "video/mp4");
 
       // Extract thumbnail from client-captured frame
       let thumbnailUrl = null;
       const thumbBlob2 = formData.get("thumbnail");
       if (thumbBlob2 && thumbBlob2.size > 0) {
         const thumbBuffer2 = Buffer.from(await thumbBlob2.arrayBuffer());
-        const { url: thumbUrl2 } = await uploadToR2(thumbBuffer2, "image/jpeg");
+        const { uploadToR2: _up4 } = await import("../s3.server.js");
+        const { url: thumbUrl2 } = await _up4(thumbBuffer2, "image/jpeg");
         thumbnailUrl = thumbUrl2;
       }
 

@@ -2,7 +2,6 @@ import { Form, useActionData, useNavigation, useNavigate } from "react-router";
 import { useEffect, useState, useRef } from "react";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
-import { uploadToR2 } from "../s3.server";
 
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
@@ -18,6 +17,7 @@ export const action = async ({ request }) => {
       const response = await fetch(sourceUrl);
       if (!response.ok) throw new Error("Failed to fetch video: " + response.status);
       const buffer = Buffer.from(await response.arrayBuffer());
+      const { uploadToR2 } = await import("../s3.server.js");
       const { key, url: r2Url } = await uploadToR2(buffer, "video/mp4");
       const { error } = await supabase.from("videos").insert({
         shop_id: shop, title, r2_url: r2Url, r2_key: key,
@@ -31,7 +31,8 @@ export const action = async ({ request }) => {
       const file = formData.get("video_file");
       if (!file || file.size === 0) return { error: "Please select a video file" };
       const buffer = Buffer.from(await file.arrayBuffer());
-      const { key, url: r2Url } = await uploadToR2(buffer, file.type || "video/mp4");
+      const { uploadToR2: uploadToR2b } = await import("../s3.server.js");
+      const { key, url: r2Url } = await uploadToR2b(buffer, file.type || "video/mp4");
       const { error } = await supabase.from("videos").insert({
         shop_id: shop, title: title || file.name.replace(/\.[^.]+$/, ""),
         r2_url: r2Url, r2_key: key, status: "draft",
