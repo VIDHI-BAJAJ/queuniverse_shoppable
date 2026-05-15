@@ -1,55 +1,44 @@
 import { supabase } from "../supabase.server";
 
-const headers = {
+const HEADERS = {
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "*",
 };
 
 export const loader = async ({ request }) => {
-  // Handle OPTIONS preflight
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers });
+    return new Response(null, { status: 200, headers: HEADERS });
   }
 
   try {
     const url = new URL(request.url);
-    const video_id = url.searchParams.get("video_id");
-    const shop = url.searchParams.get("shop");
+    const videoId = url.searchParams.get("video_id");
+    const shop    = url.searchParams.get("shop");
 
-    if (!video_id || !shop) {
-      return new Response(JSON.stringify({ error: "Missing params" }), { status: 400, headers });
+    if (!videoId || !shop) {
+      return new Response(JSON.stringify({ ok: false }), { headers: HEADERS });
     }
 
-    // Get current views
-    const { data, error: fetchError } = await supabase
+    // Get current views then increment
+    const { data } = await supabase
       .from("videos")
       .select("views")
-      .eq("id", video_id)
+      .eq("id", videoId)
       .eq("shop_id", shop)
       .single();
 
-    if (fetchError || !data) {
-      return new Response(JSON.stringify({ error: "Video not found" }), { status: 404, headers });
+    if (data) {
+      await supabase
+        .from("videos")
+        .update({ views: (data.views || 0) + 1 })
+        .eq("id", videoId)
+        .eq("shop_id", shop);
     }
 
-    // Increment views
-    const { error: updateError } = await supabase
-      .from("videos")
-      .update({ views: (data.views || 0) + 1 })
-      .eq("id", video_id)
-      .eq("shop_id", shop);
-
-    if (updateError) throw updateError;
-
-    return new Response(JSON.stringify({ ok: true, views: (data.views || 0) + 1 }), { headers });
-
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers });
+    return new Response(JSON.stringify({ ok: true }), { headers: HEADERS });
+  } catch (e) {
+    return new Response(JSON.stringify({ ok: false }), { headers: HEADERS });
   }
-};
-
-export const action = async ({ request }) => {
-  return loader({ request });
 };
