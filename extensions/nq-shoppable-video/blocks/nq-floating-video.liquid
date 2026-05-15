@@ -48,9 +48,10 @@
     })
     .catch(function() {});
 
-  // Close button
+  // Close button — sets manuallyClosed so it won't reappear
   if (closeBtn) {
     closeBtn.onclick = function() {
+      manuallyClosed = true;
       wrap.classList.remove("nq-float-visible");
       setTimeout(function() { wrap.style.display = "none"; }, 300);
       videoEl.pause();
@@ -73,7 +74,10 @@
     videoEl.pause();
   }
 
+  var manuallyClosed = false;
+
   function showFloat() {
+    if (manuallyClosed) return; // respect manual close
     wrap.style.display = "block";
     setTimeout(function() { wrap.classList.add("nq-float-visible"); }, 100);
     videoEl.play().catch(function(){});
@@ -116,21 +120,38 @@
 
     if (!cartBtn) return; // no cart button found
 
-    if ("IntersectionObserver" in window) {
-      var observer = new IntersectionObserver(function(entries) {
-        entries.forEach(function(entry) {
-          if (entry.isIntersecting) {
-            // Cart button visible → hide floating video
-            hideFloat();
-          } else {
-            // Cart button out of view → show floating video
-            showFloat();
-          }
-        });
-      }, { threshold: 0.1 });
+    // Logic:
+    // - Button above viewport (not yet scrolled to) → show video
+    // - Button visible on screen → hide video
+    // - Button below viewport (scrolled past) → hide video
 
-      observer.observe(cartBtn);
+    function checkCartButtonPosition() {
+      var rect = cartBtn.getBoundingClientRect();
+      var viewH = window.innerHeight;
+
+      // Button is above viewport = user hasn't scrolled to it yet
+      var isAboveViewport = rect.bottom < 0;
+      // Button is visible on screen
+      var isVisible = rect.top < viewH && rect.bottom > 0;
+      // Button is below viewport = user scrolled past it
+      var isBelowViewport = rect.top > viewH;
+
+      if (isAboveViewport) {
+        // User hasn't reached button yet → show video
+        showFloat();
+      } else if (isVisible) {
+        // Button is on screen → hide video
+        hideFloat();
+      } else if (isBelowViewport) {
+        // User scrolled past button → hide video
+        hideFloat();
+      }
     }
+
+    // Run on scroll
+    window.addEventListener("scroll", checkCartButtonPosition, { passive: true });
+    // Run on load
+    checkCartButtonPosition();
   }
 
   // Start watching after video loads
