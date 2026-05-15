@@ -89,14 +89,13 @@
   productId = "{{ product.id }}";
   {% endif %}
 
-  /* ── CACHE: v4 key — busts all old v1/v2/v3 stale data automatically ── */
-  // Clear any old version keys left in localStorage
+  /* ── CACHE: v5 — clears all old broken cache on every page load ── */
   (function() {
     try {
       var keysToRemove = [];
       for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
-        if (k && (k.indexOf("nq_v1_") === 0 || k.indexOf("nq_v2_") === 0)) {
+        if (k && k.indexOf("nq_") === 0 && k.indexOf("nq_v5_") !== 0) {
           keysToRemove.push(k);
         }
       }
@@ -104,7 +103,7 @@
     } catch(e) {}
   })();
 
-  var CACHE_KEY = "nq_v3_" + shop + (productId ? "_pdp_" + productId : "_home");
+  var CACHE_KEY = "nq_v5_" + shop + (productId ? "_pdp_" + productId : "_home");
   var rendered  = false;
 
   function readCache() {
@@ -136,8 +135,8 @@
         var showOn = Array.isArray(v.show_on) ? v.show_on : [];
         return showOn.includes("home") || showOn.indexOf("home") >= 0;
       });
-      // If none have show_on set (old data), show all as fallback
-      if (allVideos.length === 0) allVideos = raw;
+      // If none marked for homepage, show all live videos as fallback
+      if (allVideos.length === 0 && raw.length > 0) allVideos = raw;
     } else {
       // PDP — filter to videos tagged with this product
       var gid = "gid://shopify/Product/" + productId;
