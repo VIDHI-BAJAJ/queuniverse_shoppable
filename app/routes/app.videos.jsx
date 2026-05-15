@@ -150,9 +150,11 @@ export default function Videos() {
           </p>
         </div>
         <Link to="/app/videos/new">
-          <button style={{ padding: "10px 20px", background: "#008060", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold", fontSize: "14px" }}>
-            + Import Video
-          </button>
+          <button 
+  onClick={() => navigate("/app/videos/new")}
+  style={{ padding: "12px 24px", background: "#008060", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", marginTop: "12px" }}>
+  + Import Video
+</button>
         </Link>
       </div>
 
