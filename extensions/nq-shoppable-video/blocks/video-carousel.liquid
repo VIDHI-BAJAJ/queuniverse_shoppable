@@ -413,36 +413,26 @@
   var _productCache = {};
 
   function fetchProduct(productGidOrId) {
-    // Strip GID prefix to get numeric ID
     var id = String(productGidOrId).replace("gid://shopify/Product/", "").trim();
     if (!id || id === "undefined") return Promise.resolve(null);
-
-    // Return cached result if available
     if (_productCache[id]) return Promise.resolve(_productCache[id]);
 
-    // Use /products.json?ids=NUMERIC_ID — no limit param (limit overrides the ids filter)
-    return fetch("/products.json?ids=" + id)
+    // Fetch from our Vercel API which has Shopify Admin access — guaranteed correct product
+    return fetch("https://queuniverse-shoppable.vercel.app/api/product?id=" + id + "&shop=" + shop)
       .then(function(r) { return r.json(); })
       .then(function(d) {
-        // Find the exact product matching our ID
-        var allProducts = d.products || [];
-        var pr = null;
-        for (var i = 0; i < allProducts.length; i++) {
-          if (String(allProducts[i].id) === String(id)) { pr = allProducts[i]; break; }
-        }
-        if (!pr) pr = allProducts[0]; // fallback
-        if (!pr || !pr.variants || !pr.variants[0]) return null;
-        var v = pr.variants[0];
+        if (!d || !d.title) return null;
         var result = {
-          title:            pr.title,
-          price:            Math.round(parseFloat(v.price) * 100),
-          compare_at_price: v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null,
-          handle:           pr.handle,
-          image:            pr.images && pr.images[0] ? pr.images[0].src : null
+          title:            d.title,
+          price:            d.price,
+          compare_at_price: d.compare_at_price || null,
+          handle:           d.handle,
+          image:            d.image || null
         };
         _productCache[id] = result;
         return result;
-      }).catch(function() { return null; });
+      })
+      .catch(function() { return null; });
   }
 
   function getVideoProduct(video) {
