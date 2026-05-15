@@ -18,7 +18,7 @@ export const loader = async ({ request }) => {
   try {
     const res = await admin.graphql(`
       query {
-        products(first: 100) {
+        products(first: 250, sortKey: TITLE) {
           edges {
             node {
               id
