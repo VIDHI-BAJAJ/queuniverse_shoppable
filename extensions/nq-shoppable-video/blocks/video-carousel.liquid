@@ -96,7 +96,7 @@
       var keysToRemove = [];
       for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
-        if (k && (k.indexOf("nq_v1_") === 0 || k.indexOf("nq_v2_") === 0 || k.indexOf("nq_v3_") === 0)) {
+        if (k && (k.indexOf("nq_v1_") === 0 || k.indexOf("nq_v2_") === 0)) {
           keysToRemove.push(k);
         }
       }
@@ -104,7 +104,7 @@
     } catch(e) {}
   })();
 
-  var CACHE_KEY = "nq_v4_" + shop + (productId ? "_pdp_" + productId : "_home");
+  var CACHE_KEY = "nq_v3_" + shop + (productId ? "_pdp_" + productId : "_home");
   var rendered  = false;
 
   function readCache() {
@@ -169,7 +169,7 @@
   }
 
   // Step 2: fetch fresh data
-  var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId + "&context=pdp" : "&context=home");
+  var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
   var giveUp = setTimeout(function() {
     if (!rendered) {
       var cont = document.getElementById("nq-carousel-" + blockId);
@@ -179,7 +179,7 @@
 
   function doFetch(tries) {
     console.log("[NQ " + blockId + "] Fetching:", apiURL);
-    fetch(apiURL, { cache: "no-store" })
+    fetch(apiURL)
       .then(function(r) {
         console.log("[NQ] HTTP:", r.status, "URL:", r.url);
         if (!r.ok) throw new Error("HTTP " + r.status);
@@ -706,11 +706,11 @@
   var API  = "https://queuniverse-shoppable.vercel.app/api/videos";
   var shop = "{{ shop.permanent_domain }}";
   // Keep-warm pings homepage context — uses correct cache key matching the carousel
-  var url  = API + "?shop=" + shop + "&context=home";
-  var CACHE_KEY = "nq_v4_" + shop + "_home";
+  var url  = API + "?shop=" + shop;
+  var CACHE_KEY = "nq_v3_" + shop + "_home";
 
   function ping() {
-    fetch(url, { keepalive: true, cache: "no-store" })
+    fetch(url, { keepalive: true })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data && data.videos) {
