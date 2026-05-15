@@ -418,10 +418,17 @@
     // Return cached result if available
     if (_productCache[id]) return Promise.resolve(_productCache[id]);
 
-    return fetch("/products.json?limit=1&ids=" + id)
+    // Use /products.json?ids=NUMERIC_ID — no limit param (limit overrides the ids filter)
+    return fetch("/products.json?ids=" + id)
       .then(function(r) { return r.json(); })
       .then(function(d) {
-        var pr = d.products && d.products[0];
+        // Find the exact product matching our ID
+        var allProducts = d.products || [];
+        var pr = null;
+        for (var i = 0; i < allProducts.length; i++) {
+          if (String(allProducts[i].id) === String(id)) { pr = allProducts[i]; break; }
+        }
+        if (!pr) pr = allProducts[0]; // fallback
         if (!pr || !pr.variants || !pr.variants[0]) return null;
         var v = pr.variants[0];
         var result = {
@@ -431,7 +438,7 @@
           handle:           pr.handle,
           image:            pr.images && pr.images[0] ? pr.images[0].src : null
         };
-        _productCache[id] = result; // cache it
+        _productCache[id] = result;
         return result;
       }).catch(function() { return null; });
   }
