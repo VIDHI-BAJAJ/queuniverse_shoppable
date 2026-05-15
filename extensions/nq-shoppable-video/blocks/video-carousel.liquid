@@ -581,12 +581,20 @@
     if (muteBtn) muteBtn.innerHTML = isMuted ? "&#128263;" : "&#128266;";
   };
 
+  var SUPA_URL = "https://iwcqtqyoymegzosgnaku.supabase.co";
+  var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3Y3F0cW95bWVnem9zZ25ha3UiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NzE1Nzc0MCwiZXhwIjoyMDYyNzMzNzQwfQ.Xc6QFMhHxJKJI3PiGmMIJ1r6-xaBtJcNsrPpXk1-wJo";
+
   function trackView(video) {
     try {
-      fetch("https://queuniverse-shoppable.vercel.app/api/track", {
+      // Call Supabase RPC directly from storefront
+      fetch(SUPA_URL + "/rest/v1/rpc/increment_video_views", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ video_id: video.id, shop: shop }),
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPA_KEY,
+          "Authorization": "Bearer " + SUPA_KEY
+        },
+        body: JSON.stringify({ vid: video.id, sid: shop }),
         keepalive: true
       }).catch(function(){});
     } catch(e) {}
