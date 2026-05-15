@@ -155,7 +155,7 @@
   }
 
   // Step 2: fetch fresh data
-  var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
+  var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId + "&context=pdp" : "&context=home");
   var giveUp = setTimeout(function() {
     if (!rendered) {
       var cont = document.getElementById("nq-carousel-" + blockId);
@@ -225,6 +225,8 @@
     videoEl.playsInline = true;
     videoEl.preload     = "none";
     videoEl.className   = "nq-video-el";
+    // Show thumbnail as poster so card never shows black while loading
+    if (video.thumbnail_url) videoEl.poster = video.thumbnail_url;
 
     card.onmouseenter = function() {
       if (!videoEl.src && videoEl.dataset.src) { videoEl.src = videoEl.dataset.src; }
@@ -381,21 +383,32 @@
     return (Math.round(parseInt(cents)) / 100).toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0});
   }
 
-  function fetchProduct(productId) {
-    var id = productId.replace("gid://shopify/Product/", "");
+  // Product cache so we don't re-fetch the same product multiple times
+  var _productCache = {};
+
+  function fetchProduct(productGidOrId) {
+    // Strip GID prefix to get numeric ID
+    var id = String(productGidOrId).replace("gid://shopify/Product/", "").trim();
+    if (!id || id === "undefined") return Promise.resolve(null);
+
+    // Return cached result if available
+    if (_productCache[id]) return Promise.resolve(_productCache[id]);
+
     return fetch("/products.json?limit=1&ids=" + id)
       .then(function(r) { return r.json(); })
       .then(function(d) {
         var pr = d.products && d.products[0];
         if (!pr || !pr.variants || !pr.variants[0]) return null;
         var v = pr.variants[0];
-        return {
+        var result = {
           title:            pr.title,
           price:            Math.round(parseFloat(v.price) * 100),
           compare_at_price: v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null,
           handle:           pr.handle,
           image:            pr.images && pr.images[0] ? pr.images[0].src : null
         };
+        _productCache[id] = result; // cache it
+        return result;
       }).catch(function() { return null; });
   }
 
@@ -659,8 +672,9 @@
 
   var API  = "https://queuniverse-shoppable.vercel.app/api/videos";
   var shop = "{{ shop.permanent_domain }}";
-  var url  = API + "?shop=" + shop;
-  var CACHE_KEY = "nq_v3_" + shop;
+  // Keep-warm pings homepage context — uses correct cache key matching the carousel
+  var url  = API + "?shop=" + shop + "&context=home";
+  var CACHE_KEY = "nq_v3_" + shop + "_home";
 
   function ping() {
     fetch(url, { keepalive: true })
@@ -668,7 +682,6 @@
       .then(function(data) {
         if (data && data.videos) {
           try {
-            // Keep-warm ping also refreshes the cache with latest view counts
             localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
           } catch(e) {}
         }
