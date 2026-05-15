@@ -112,12 +112,14 @@
       if (!raw) return null;
       var obj = JSON.parse(raw);
       // 5 minute TTL (300000ms) — keeps view counts fresh
-      if (Date.now() - obj.ts > 300000) { localStorage.removeItem(CACHE_KEY); return null; }
+      if (Date.now() - obj.ts > 60000) { localStorage.removeItem(CACHE_KEY); return null; } // 60s TTL
       return obj.data;
     } catch(e) { return null; }
   }
 
   function writeCache(data) {
+    // Never write empty video arrays to cache — causes blank page on refresh
+    if (!data || !data.videos || data.videos.length === 0) return;
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
   }
 
@@ -258,8 +260,13 @@
     videoEl.playsInline = true;
     videoEl.className   = "nq-video-el";
     // Show thumbnail as poster so card never shows black while loading
-    // Always lazy-load — thumbnail covers black, no src until hover/visible
-    videoEl.preload = "none";
+    // First 3 cards: preload metadata for instant play; rest: lazy
+    if (index < 3) {
+      videoEl.preload = "metadata";
+      videoEl.src = video.r2_url;
+    } else {
+      videoEl.preload = "none";
+    }
     if (video.thumbnail_url) videoEl.poster = video.thumbnail_url;
     videoEl.dataset.src = video.r2_url;
 
@@ -729,8 +736,9 @@
     fetch(url, { keepalive: true })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        if (data && data.videos) {
+        if (data && data.videos && data.videos.length > 0) {
           try {
+            // Only cache if we got actual videos — never cache empty response
             localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
           } catch(e) {}
         }

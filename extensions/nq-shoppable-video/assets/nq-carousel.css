@@ -820,6 +820,31 @@
     height: calc((50vw - 14px) * 1.72) !important;
   }
 
+  /* Mobile product info below — same bottom position for all cards */
+  .nq-tile-product_below_3 .nq-below-info,
+  .nq-tile-product_below_2 .nq-below-info,
+  .nq-tile-product_below .nq-below-info {
+    bottom: -80px;
+    left: 0;
+    right: 0;
+    padding: 6px 2px 0;
+  }
+
+  /* Ensure all product_below cards have same margin-bottom on mobile */
+  .nq-tile-product_below_3,
+  .nq-tile-product_below_2,
+  .nq-tile-product_below {
+    margin-bottom: 90px;
+  }
+
+  .nq-below-title {
+    font-size: 11px;
+  }
+
+  .nq-below-price {
+    font-size: 11px;
+  }
+
   /* Story circles smaller on mobile */
   .nq-tile-story_format {
     width: 82px !important;

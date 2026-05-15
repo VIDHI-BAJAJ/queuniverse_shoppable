@@ -4,30 +4,30 @@ import { supabase } from "../supabase.server";
 import { useState, useMemo } from "react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend
+  Tooltip, ResponsiveContainer, 
 } from "recharts";
-
+ 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
-
+ 
   try {
     const { data: videos } = await supabase
       .from("videos")
       .select("id, status, views, created_at, product_ids")
       .eq("shop_id", shop);
-
+ 
     const { data: events } = await supabase
       .from("video_events")
       .select("*")
       .eq("shop_id", shop)
       .order("created_at", { ascending: true });
-
+ 
     const total = videos?.length || 0;
     const live = videos?.filter(v => v.status === "live").length || 0;
     const totalViews = videos?.reduce((sum, v) => sum + (v.views || 0), 0) || 0;
     const withProducts = videos?.filter(v => v.product_ids?.length > 0).length || 0;
-
+ 
     // Build daily chart data from events (last 90 days)
     const eventsData = events || [];
     const dailyMap = {};
@@ -40,11 +40,11 @@ export const loader = async ({ request }) => {
       if (e.event_type === "order")  dailyMap[day].orders++;
       if (e.event_type === "watch")  dailyMap[day].watch_seconds += (e.value || 0);
     });
-
+ 
     // Fill in views from videos.views if no events table yet
     // (graceful fallback: spread total views across all-time evenly)
     const chartData = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
-
+ 
     // Aggregate metrics from events
     const totalClicks      = eventsData.filter(e => e.event_type === "click").length;
     const totalOrders      = eventsData.filter(e => e.event_type === "order").length;
@@ -54,13 +54,26 @@ export const loader = async ({ request }) => {
     const conversionRate   = totalViews > 0 ? ((totalOrders / totalViews) * 100).toFixed(2) : "0.00";
     const watchHours       = (totalWatchSec / 3600).toFixed(1);
     const impressionSales  = totalRevenue;
-
+ 
+    // Fallback: if no video_events yet, build chart from videos.views spread over created_at dates
+    let finalChartData = chartData;
+    if (finalChartData.length === 0 && videos && videos.length > 0) {
+      const fallbackMap = {};
+      videos.forEach(v => {
+        const day = v.created_at?.slice(0, 10);
+        if (!day) return;
+        if (!fallbackMap[day]) fallbackMap[day] = { date: day, views: 0, clicks: 0, orders: 0 };
+        fallbackMap[day].views += (v.views || 0);
+      });
+      finalChartData = Object.values(fallbackMap).sort((a, b) => a.date.localeCompare(b.date));
+    }
+ 
     return {
       total, live, totalViews, withProducts,
       totalClicks, totalOrders, totalWatchSec,
       totalRevenue, avgOrderValue, conversionRate,
       watchHours, impressionSales,
-      chartData,
+      chartData: finalChartData,
     };
   } catch (e) {
     console.error("Dashboard loader error:", e);
@@ -73,39 +86,39 @@ export const loader = async ({ request }) => {
     };
   }
 };
-
+ 
 const RANGES = [
   { label: "Last 7 days",  days: 7 },
   { label: "Last 30 days", days: 30 },
   { label: "Last 90 days", days: 90 },
   { label: "All time",     days: null },
 ];
-
+ 
 const METRICS = [
-  { key: "views",  label: "Watch Time (Views)", color: "#485861;" },
-  { key: "clicks", label: "Video Clicks",        color: "#485861;" },
-  { key: "orders", label: "Orders",              color: "#485861;" },
+  { key: "views",  label: "Watch Time (Views)", color: "#6366f1" },
+  { key: "clicks", label: "Video Clicks",        color: "#ec4899" },
+  { key: "orders", label: "Orders",              color: "#10b981" },
 ];
-
+ 
 function fmtINR(v) {
   return "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 function fmtNum(v) {
   return Number(v || 0).toLocaleString("en-IN");
 }
-
+ 
 export default function Index() {
   const data = useLoaderData();
   const navigate = useNavigate();
-
+ 
   const [activeRange, setActiveRange] = useState(1); // default Last 30 days
   const [customFrom, setCustomFrom] = useState("");
   const [customTo,   setCustomTo]   = useState("");
   const [activeMetric, setActiveMetric] = useState("views");
-
+ 
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
-
+ 
   // Filter chartData by selected range
   const filteredChart = useMemo(() => {
     let from, to;
@@ -121,15 +134,15 @@ export default function Index() {
     }
     return data.chartData.filter(r => r.date >= from && r.date <= to);
   }, [activeRange, customFrom, customTo, data.chartData]);
-
+ 
   const stats = [
-    { label: "Total Videos",        value: fmtNum(data.total),          icon: "🎬", sub: `${data.live} live` },
-    { label: "Total Views",          value: fmtNum(data.totalViews),     icon: "👁",  sub: "Cumulative" },
-    { label: "Buy Now Clicks",       value: fmtNum(data.totalClicks),    icon: "🛒", sub: "Product taps" },
-    { label: "Total Orders",         value: fmtNum(data.totalOrders),    icon: "📦", sub: "From videos" },
-    { label: "Watch Time",           value: data.watchHours + " hrs",    icon: "⏱",  sub: "Total watched" },
+    { label: "Total Videos",        value: fmtNum(data.total),         sub: `${data.live} live` },
+    { label: "Total Views",          value: fmtNum(data.totalViews),     sub: "Cumulative" },
+    { label: "Buy Now Clicks",       value: fmtNum(data.totalClicks),     sub: "Product taps" },
+    { label: "Total Orders",         value: fmtNum(data.totalOrders),     sub: "From videos" },
+    { label: "Watch Time",           value: data.watchHours + " hrs",     sub: "Total watched" },
   ];
-
+ 
   const engagement = [
     { label: "Total Engagement",       value: fmtNum((data.totalViews || 0) + (data.totalClicks || 0)) },
     { label: "Product Clicks",         value: fmtNum(data.totalClicks) },
@@ -232,7 +245,7 @@ export default function Index() {
   };
 
   const activeMetricObj = METRICS.find(m => m.key === activeMetric);
-
+ 
   return (
     <div style={s.page}>
       {/* Header */}
