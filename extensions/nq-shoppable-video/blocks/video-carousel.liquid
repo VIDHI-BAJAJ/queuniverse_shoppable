@@ -715,11 +715,45 @@
       var vid = el.getAttribute("data-video-id");
       var sh  = el.getAttribute("data-shop");
       if (!vid || !sh) return;
+      // Track click event
       fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + vid + "&shop=" + sh + "&event=click", {
         method: "GET", keepalive: true
       }).catch(function(){});
+      // Store in sessionStorage so we can attribute order to this video
+      try {
+        sessionStorage.setItem("nq_last_video", JSON.stringify({ id: vid, shop: sh, ts: Date.now() }));
+      } catch(e) {}
     } catch(e) {}
   };
+
+  // Track order on Shopify thank-you/order-status page
+  (function() {
+    try {
+      var isThankYou = window.location.pathname.indexOf("/thank_you") >= 0 ||
+                       window.location.pathname.indexOf("/orders/") >= 0 ||
+                       (typeof Shopify !== "undefined" && Shopify.checkout);
+      if (!isThankYou) return;
+
+      var stored = sessionStorage.getItem("nq_last_video");
+      if (!stored) return;
+      var last = JSON.parse(stored);
+      // Only attribute if click was within last 30 minutes
+      if (Date.now() - last.ts > 30 * 60 * 1000) return;
+
+      // Get order value from Shopify checkout object if available
+      var orderValue = 0;
+      if (typeof Shopify !== "undefined" && Shopify.checkout && Shopify.checkout.total_price) {
+        orderValue = parseFloat(Shopify.checkout.total_price);
+      }
+
+      fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + last.id + "&shop=" + last.shop + "&event=order&value=" + orderValue, {
+        method: "GET", keepalive: true
+      }).catch(function(){});
+
+      // Clear so we don't double-count
+      sessionStorage.removeItem("nq_last_video");
+    } catch(e) {}
+  })();
 
   function showPopup(bid) {
     var video   = allVideos[currentIndex];

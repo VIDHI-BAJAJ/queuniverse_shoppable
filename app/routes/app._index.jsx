@@ -57,15 +57,10 @@ export const loader = async ({ request }) => {
  
     // Fallback: if no video_events yet, build chart from videos.views spread over created_at dates
     let finalChartData = chartData;
-    if (finalChartData.length === 0 && videos && videos.length > 0) {
-      const fallbackMap = {};
-      videos.forEach(v => {
-        const day = v.created_at?.slice(0, 10);
-        if (!day) return;
-        if (!fallbackMap[day]) fallbackMap[day] = { date: day, views: 0, clicks: 0, orders: 0 };
-        fallbackMap[day].views += (v.views || 0);
-      });
-      finalChartData = Object.values(fallbackMap).sort((a, b) => a.date.localeCompare(b.date));
+    if (finalChartData.length === 0 && totalViews > 0) {
+      // No events table yet — show total views on today's date so graph isn't empty
+      const today = new Date().toISOString().slice(0, 10);
+      finalChartData = [{ date: today, views: totalViews, clicks: 0, orders: 0 }];
     }
  
     return {
