@@ -31,7 +31,7 @@ export const loader = async ({ request }) => {
 
     const { data: videos, error } = await supabase
       .from("videos")
-      .select("id, title, r2_url, thumbnail_url, product_ids, product_handle, show_on, views")
+      .select("id, title, r2_url, thumbnail_url, product_ids, show_on, views")
       .eq("shop_id", shop)
       .eq("status", "live")
       .order("created_at", { ascending: false });
