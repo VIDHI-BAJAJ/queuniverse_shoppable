@@ -67,9 +67,24 @@ export const action = async ({ request }) => {
         Bucket: process.env.R2_BUCKET_NAME, Key: key, Body: buffer, ContentType: "video/mp4",
       }));
       const r2Url = `${process.env.R2_PUBLIC_URL}/${key}`;
+
+      // Extract thumbnail from uploaded thumbnail blob (sent from client)
+      let thumbnailUrl = null;
+      const thumbBlob = formData.get("thumbnail");
+      if (thumbBlob && thumbBlob.size > 0) {
+        const thumbBuffer = Buffer.from(await thumbBlob.arrayBuffer());
+        const thumbKey = `thumbnails/${uuidv4()}.jpg`;
+        await getS3().send(new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME, Key: thumbKey,
+          Body: thumbBuffer, ContentType: "image/jpeg",
+        }));
+        thumbnailUrl = `${process.env.R2_PUBLIC_URL}/${thumbKey}`;
+      }
+
       const { error } = await supabase.from("videos").insert({
         shop_id: shop, title, r2_url: r2Url, r2_key: key,
         source_url: sourceUrl, status: "draft", views: 0, product_ids: [], show_on: [],
+        thumbnail_url: thumbnailUrl,
       });
       if (error) throw error;
       return { importSuccess: true };
@@ -87,9 +102,24 @@ export const action = async ({ request }) => {
         Bucket: process.env.R2_BUCKET_NAME, Key: key, Body: buffer, ContentType: file.type || "video/mp4",
       }));
       const r2Url = `${process.env.R2_PUBLIC_URL}/${key}`;
+
+      // Extract thumbnail from client-captured frame
+      let thumbnailUrl = null;
+      const thumbBlob2 = formData.get("thumbnail");
+      if (thumbBlob2 && thumbBlob2.size > 0) {
+        const thumbBuffer2 = Buffer.from(await thumbBlob2.arrayBuffer());
+        const thumbKey2 = `thumbnails/${uuidv4()}.jpg`;
+        await getS3().send(new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME, Key: thumbKey2,
+          Body: thumbBuffer2, ContentType: "image/jpeg",
+        }));
+        thumbnailUrl = `${process.env.R2_PUBLIC_URL}/${thumbKey2}`;
+      }
+
       const { error } = await supabase.from("videos").insert({
         shop_id: shop, title: title || file.name.replace(/\.[^.]+$/, ""),
         r2_url: r2Url, r2_key: key, status: "draft", views: 0, product_ids: [], show_on: [],
+        thumbnail_url: thumbnailUrl,
       });
       if (error) throw error;
       return { importSuccess: true };
@@ -139,6 +169,61 @@ export default function Videos() {
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const fileInputRef = useRef(null);
+  const thumbnailInputRef = useRef(null);
+  const [thumbPreview, setThumbPreview] = useState(null);
+
+  // Extract first frame from a video File or URL as a JPEG blob
+  const extractFrame = (src) => new Promise((resolve) => {
+    const vid = document.createElement("video");
+    vid.crossOrigin = "anonymous";
+    vid.muted = true;
+    vid.playsInline = true;
+    vid.preload = "metadata";
+    vid.onloadeddata = () => {
+      vid.currentTime = 0.1; // seek slightly in to avoid pure black frames
+    };
+    vid.onseeked = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = vid.videoWidth || 640;
+      canvas.height = vid.videoHeight || 360;
+      canvas.getContext("2d").drawImage(vid, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.85);
+    };
+    vid.onerror = () => resolve(null);
+    if (typeof src === "string") {
+      vid.src = src;
+    } else {
+      vid.src = URL.createObjectURL(src);
+    }
+    vid.load();
+  });
+
+  // Called when file is selected — extract frame immediately for preview + upload
+  const handleFileSelect = async (file) => {
+    if (!file) return;
+    setSelectedFile(file);
+    const blob = await extractFrame(file);
+    if (blob) {
+      setThumbPreview(URL.createObjectURL(blob));
+      // Store blob in a DataTransfer so we can attach it to a hidden input
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], "thumbnail.jpg", { type: "image/jpeg" }));
+      if (thumbnailInputRef.current) thumbnailInputRef.current.files = dt.files;
+    }
+  };
+
+  // Called when URL is typed — extract frame from URL
+  const handleUrlThumb = async (url) => {
+    if (!url || !url.startsWith("http")) return;
+    setThumbPreview(null);
+    const blob = await extractFrame(url);
+    if (blob) {
+      setThumbPreview(URL.createObjectURL(blob));
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], "thumbnail.jpg", { type: "image/jpeg" }));
+      if (thumbnailInputRef.current) thumbnailInputRef.current.files = dt.files;
+    }
+  };
 
   /* Tag modal state */
   const [tagModal, setTagModal] = useState(null);
@@ -220,7 +305,9 @@ export default function Videos() {
               }}>
                 <div style={{ position: "relative", height: "260px", background: "#111" }}>
                   <video src={video.r2_url}
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }} muted playsInline
+                    poster={video.thumbnail_url || undefined}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", background: "#1a1a1a" }}
+                    muted playsInline preload="none"
                     onMouseEnter={e => e.target.play()} onMouseLeave={e => { e.target.pause(); e.target.currentTime = 0; }}
                   />
                   <div style={{
@@ -311,7 +398,7 @@ export default function Videos() {
             {/* Modal header */}
             <div style={{ padding: "24px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h2 style={{ margin: 0, fontSize: "20px", fontWeight: "600", color: C.text }}>Add New Media</h2>
-              <button onClick={() => setShowImport(false)} style={{
+              <button onClick={() => { setShowImport(false); setThumbPreview(null); setSelectedFile(null); }} style={{
                 background: "none", border: "1px solid #e8e8e6", borderRadius: "50%",
                 width: "32px", height: "32px", cursor: "pointer", fontSize: "16px",
                 color: C.muted, display: "flex", alignItems: "center", justifyContent: "center",
@@ -356,11 +443,21 @@ export default function Videos() {
                   <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: C.text, marginBottom: "6px" }}>
                     Direct Video URL <span style={{ color: "#dc2626" }}>*</span>
                   </label>
-                  <input name="source_url" type="url" required placeholder="https://example.com/video.mp4" style={{
-                    width: "100%", padding: "10px 14px", border: `1.5px solid ${C.border}`, borderRadius: "8px",
-                    fontSize: "14px", outline: "none", boxSizing: "border-box", color: C.text, fontFamily: "inherit",
-                  }} />
+                  <input name="source_url" type="url" required placeholder="https://example.com/video.mp4"
+                    onBlur={(e) => handleUrlThumb(e.target.value)}
+                    style={{
+                      width: "100%", padding: "10px 14px", border: `1.5px solid ${C.border}`, borderRadius: "8px",
+                      fontSize: "14px", outline: "none", boxSizing: "border-box", color: C.text, fontFamily: "inherit",
+                    }} />
                   <p style={{ margin: "6px 0 0", fontSize: "12px", color: C.muted }}>Must be a direct .mp4 or .mov link.</p>
+                  {/* Hidden thumbnail input — populated by extractFrame */}
+                  <input ref={thumbnailInputRef} type="file" name="thumbnail" style={{ display: "none" }} />
+                  {thumbPreview && (
+                    <div style={{ marginTop: "12px", borderRadius: "8px", overflow: "hidden", border: `1px solid ${C.border}` }}>
+                      <img src={thumbPreview} alt="Cover preview" style={{ width: "100%", maxHeight: "140px", objectFit: "cover", display: "block" }} />
+                      <p style={{ margin: "6px 8px", fontSize: "11px", color: C.muted }}>✅ Cover image extracted from first frame</p>
+                    </div>
+                  )}
                 </div>
                 <button type="submit" disabled={isImporting} style={{
                   width: "100%", padding: "12px", background: isImporting ? "#8a9da5" : C.accent,
@@ -395,7 +492,7 @@ export default function Videos() {
                   onDrop={(e) => {
                     e.preventDefault(); setDragOver(false);
                     const f = e.dataTransfer.files[0];
-                    if (f) setSelectedFile(f);
+                    if (f) handleFileSelect(f);
                   }}
                   onClick={() => fileInputRef.current?.click()}
                   style={{
@@ -407,9 +504,11 @@ export default function Videos() {
                 >
                   <input ref={fileInputRef} type="file" name="video_file"
                     accept="video/mp4,video/mov,video/quicktime,.mp4,.mov"
-                    onChange={(e) => { const f = e.target.files[0]; if (f) setSelectedFile(f); }}
+                    onChange={(e) => handleFileSelect(e.target.files[0])}
                     style={{ display: "none" }}
                   />
+                  {/* Hidden thumbnail input — populated by extractFrame */}
+                  <input ref={thumbnailInputRef} type="file" name="thumbnail" style={{ display: "none" }} />
                   <div style={{ fontSize: "32px", marginBottom: "10px" }}>{selectedFile ? "🎬" : "☁️"}</div>
                   {selectedFile ? (
                     <>
@@ -423,6 +522,12 @@ export default function Videos() {
                     </>
                   )}
                 </div>
+                {thumbPreview && (
+                  <div style={{ marginBottom: "16px", borderRadius: "8px", overflow: "hidden", border: `1px solid ${C.border}` }}>
+                    <img src={thumbPreview} alt="Cover preview" style={{ width: "100%", maxHeight: "140px", objectFit: "cover", display: "block" }} />
+                    <p style={{ margin: "6px 8px", fontSize: "11px", color: C.muted }}>✅ Cover image extracted from first frame</p>
+                  </div>
+                )}
 
                 <button type="submit" disabled={isImporting || !selectedFile} style={{
                   width: "100%", padding: "12px",
