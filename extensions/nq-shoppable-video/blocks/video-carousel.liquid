@@ -26,7 +26,7 @@
 
   {% else %}
     <div class="nq-carousel-wrap">
-  <div class="nq-carousel" id="nq-carousel-{{ block.id }}">
+      <div class="nq-carousel" id="nq-carousel-{{ block.id }}">
         {%- for i in (1..5) -%}
           <div class="nq-skeleton" style="width:{{ block.settings.card_width }}px;height:{{ block.settings.card_height }}px;flex-shrink:0;"></div>
         {%- endfor -%}
@@ -83,29 +83,33 @@
   var currentIndex = 0;
   var active3D = 0;
 
-  /* ── CACHE & FETCH ─────────────────────────────────────────────
-     1. Read localStorage (24h TTL) → render instantly if found
-     2. Always fetch fresh from API → update cache + allVideos
-     3. Retry up to 3x on failure, show refresh link if all fail
-  ─────────────────────────────────────────────────────────────*/
-  // Separate cache for homepage vs PDP so they don't overwrite each other
-  var today = new Date().toISOString().slice(0, 10); // "2026-05-15"
-var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId : "_home");
-   var rendered  = false;
+  // Detect if we are on a product page
+  var productId = null;
+  {% if product %}
+  productId = "{{ product.id }}";
+  {% endif %}
+
+  /* ── CACHE: 5 minute TTL so view counts stay fresh ── */
+  var CACHE_KEY = "nq_v3_" + shop + (productId ? "_pdp_" + productId : "_home");
+  var rendered  = false;
 
   function readCache() {
     try {
       var raw = localStorage.getItem(CACHE_KEY);
       if (!raw) return null;
       var obj = JSON.parse(raw);
-      // Expire after 24h
-      if (Date.now() - obj.ts > 86400000) { localStorage.removeItem(CACHE_KEY); return null; }
+      // 5 minute TTL (300000ms) — keeps view counts fresh
+      if (Date.now() - obj.ts > 300000) { localStorage.removeItem(CACHE_KEY); return null; }
       return obj.data;
     } catch(e) { return null; }
   }
 
   function writeCache(data) {
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
+  }
+
+  function bustCache() {
+    try { localStorage.removeItem(CACHE_KEY); } catch(e) {}
   }
 
   function renderVideos(data) {
@@ -115,9 +119,7 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
     if (!cont) { console.log("[NQ] Container not found!"); return; }
     cont.innerHTML = "";
     if (!allVideos.length) {
-      // Hide entire section if no videos (especially on PDP)
       if (productId) {
-        // On PDP with no tagged videos — hide the whole section
         var section = cont.closest(".nq-section");
         if (section) section.style.display = "none";
       } else {
@@ -153,13 +155,8 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
   }
 
   // Step 2: fetch fresh data
-  // Detect if we are on a product page and pass product_id for PDP filtering
-  var productId = null;
-  {% if product %}
-  productId = "{{ product.id }}";
-  {% endif %}
   var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
-  var giveUp  = setTimeout(function() {
+  var giveUp = setTimeout(function() {
     if (!rendered) {
       var cont = document.getElementById("nq-carousel-" + blockId);
       if (cont) cont.innerHTML = "<p class='nq-empty' style='padding:20px'>Slow connection — <a href='javascript:location.reload()' style='color:#333;text-decoration:underline'>tap to refresh</a></p>";
@@ -181,7 +178,10 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
         if (!rendered) {
           renderVideos(data);
         } else {
+          // Update allVideos with fresh data (includes latest view counts)
           allVideos = data.videos || [];
+          // Refresh view counters on all visible cards
+          refreshAllViewCounters();
         }
       })
       .catch(function(err) {
@@ -199,6 +199,19 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
   }
 
   doFetch(3);
+
+  /* ── Refresh all view counters on cards after fresh fetch ── */
+  function refreshAllViewCounters() {
+    var cont = document.getElementById("nq-carousel-" + blockId);
+    if (!cont) return;
+    var cards = cont.querySelectorAll(".nq-card");
+    cards.forEach(function(card, i) {
+      if (allVideos[i]) {
+        var viewEl = card.querySelector(".nq-views");
+        if (viewEl) viewEl.innerHTML = "&#128065; " + (allVideos[i].views || 0);
+      }
+    });
+  }
 
   /* ───────────────────────── Card Builder ───────────────────────── */
   function buildCard(video, index) {
@@ -242,129 +255,118 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
 
     switch (tileType) {
 
-      /* 1 & 2 — Transparent overlay: thumbnail + title at bottom of video */
       case "img_transparent_text_overlay_3":
       case "img_transparent_text_overlay_2":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
         getVideoProduct(video).then(function(p) {
-            if (!p) return;
-            var ov = document.createElement("div");
-            ov.className = "nq-ov-transparent";
-            ov.innerHTML =
-              (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
-              '<span class="nq-ov-title">' + p.title + '</span>';
-            card.appendChild(ov);
-          });
+          if (!p) return;
+          var ov = document.createElement("div");
+          ov.className = "nq-ov-transparent";
+          ov.innerHTML =
+            (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
+            '<span class="nq-ov-title">' + p.title + '</span>';
+          card.appendChild(ov);
+        });
         break;
 
-      /* 3 — Opaque white card overlapping bottom of video */
       case "img_opaque_text_overlay_3":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;overflow:visible;";
         getVideoProduct(video).then(function(p) {
-            if (!p) return;
-            var ov = document.createElement("div");
-            ov.className = "nq-ov-opaque";
-            ov.innerHTML =
-              (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
-              '<div class="nq-ov-text">' +
-                '<span class="nq-ov-title">' + p.title + '</span>' +
-                '<span class="nq-ov-price">&#8377;' + fmt(p.price) + '</span>' +
-              '</div>';
-            card.appendChild(ov);
-          });
+          if (!p) return;
+          var ov = document.createElement("div");
+          ov.className = "nq-ov-opaque";
+          ov.innerHTML =
+            (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
+            '<div class="nq-ov-text">' +
+              '<span class="nq-ov-title">' + p.title + '</span>' +
+              '<span class="nq-ov-price">&#8377;' + fmt(p.price) + '</span>' +
+            '</div>';
+          card.appendChild(ov);
+        });
         break;
 
-      /* 4 — Single tile, smaller, no product */
       case "single_tile_no_overlay":
         card.style.cssText += "width:" + Math.round(cardW * 0.72) + "px;height:" + Math.round(cardH * 0.65) + "px;";
         break;
 
-      /* 5 & 6 — Product info below card */
       case "product_below_3":
       case "product_below_2":
       case "product_below":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;overflow:visible;";
         getVideoProduct(video).then(function(p) {
-            if (!p) return;
-            var discHtml = '';
-            if (p.compare_at_price && p.compare_at_price > p.price) {
-              var pct = Math.round((p.compare_at_price - p.price) / p.compare_at_price * 100);
-              discHtml =
-                '<span class="nq-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>' +
-                '<span class="nq-disc-badge">' + pct + '% off</span>';
-            }
-            var info = document.createElement("div");
-            info.className = "nq-below-info";
-            info.innerHTML =
-              '<p class="nq-below-title">' + p.title + '</p>' +
-              '<p class="nq-below-price">&#8377;' + fmt(p.price) + ' ' + discHtml + '</p>';
-            card.appendChild(info);
-          });
+          if (!p) return;
+          var discHtml = '';
+          if (p.compare_at_price && p.compare_at_price > p.price) {
+            var pct = Math.round((p.compare_at_price - p.price) / p.compare_at_price * 100);
+            discHtml =
+              '<span class="nq-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>' +
+              '<span class="nq-disc-badge">' + pct + '% off</span>';
+          }
+          var info = document.createElement("div");
+          info.className = "nq-below-info";
+          info.innerHTML =
+            '<p class="nq-below-title">' + p.title + '</p>' +
+            '<p class="nq-below-price">&#8377;' + fmt(p.price) + ' ' + discHtml + '</p>';
+          card.appendChild(info);
+        });
         break;
 
-      /* 7 — Story: circular card */
       case "story_format":
         card.style.cssText += "width:110px;height:110px;border-radius:50%;";
         views.style.display = "none";
         break;
 
-      /* 8 — Feed View More: horizontal carousel + transparent overlay inside */
       case "feed_view_more":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
         getVideoProduct(video).then(function(p) {
-            if (!p) return;
-            var ov = document.createElement("div");
-            ov.className = "nq-ov-transparent";
-            ov.innerHTML =
-              (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
-              '<span class="nq-ov-title">' + p.title + '</span>';
-            card.appendChild(ov);
-          });
+          if (!p) return;
+          var ov = document.createElement("div");
+          ov.className = "nq-ov-transparent";
+          ov.innerHTML =
+            (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
+            '<span class="nq-ov-title">' + p.title + '</span>';
+          card.appendChild(ov);
+        });
         break;
 
-      /* 9 — Feed On Scroll: 2-col grid, fade-in, product below */
       case "feed_on_scroll":
         card.classList.add("nq-scroll-fade");
         getVideoProduct(video).then(function(p) {
-            if (!p) return;
-            var priceRow = '&#8377;' + fmt(p.price);
-            if (p.compare_at_price && p.compare_at_price > p.price) {
-              priceRow += ' <span class="nq-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
-            }
-            var info = document.createElement("div");
-            info.className = "nq-below-info";
-            info.innerHTML =
-              '<p class="nq-below-title">' + p.title + '</p>' +
-              '<p class="nq-below-price">' + priceRow + '</p>';
-            card.appendChild(info);
-          });
+          if (!p) return;
+          var priceRow = '&#8377;' + fmt(p.price);
+          if (p.compare_at_price && p.compare_at_price > p.price) {
+            priceRow += ' <span class="nq-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
+          }
+          var info = document.createElement("div");
+          info.className = "nq-below-info";
+          info.innerHTML =
+            '<p class="nq-below-title">' + p.title + '</p>' +
+            '<p class="nq-below-price">' + priceRow + '</p>';
+          card.appendChild(info);
+        });
         break;
 
-      /* 10 — Grid Theme Border: rounded coloured border, no product info */
       case "grid_theme_border":
         card.style.border = "3px solid " + btnColor;
         break;
 
-      /* 11 — Grid No Border: flush grid, no border */
       case "grid_no_border":
         card.style.borderRadius = "0";
         break;
 
-      /* 12 — 3D Navigation */
       case "3d_navigation":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
         getVideoProduct(video).then(function(p) {
-            if (!p) return;
-            var ov = document.createElement("div");
-            ov.className = "nq-ov-transparent";
-            ov.innerHTML =
-              (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
-              '<span class="nq-ov-title">' + p.title + '</span>';
-            card.appendChild(ov);
-          });
+          if (!p) return;
+          var ov = document.createElement("div");
+          ov.className = "nq-ov-transparent";
+          ov.innerHTML =
+            (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
+            '<span class="nq-ov-title">' + p.title + '</span>';
+          card.appendChild(ov);
+        });
         break;
 
-      /* 13 — Minimal */
       case "minimal":
       default:
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
@@ -376,11 +378,9 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
 
   /* ───────────────────────── Helpers ───────────────────────── */
   function fmt(cents) {
-    // cents are stored as paise (price * 100), so divide back
     return (Math.round(parseInt(cents)) / 100).toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0});
   }
 
-  // Fetch product by GID or numeric ID
   function fetchProduct(productId) {
     var id = productId.replace("gid://shopify/Product/", "");
     return fetch("/products.json?limit=1&ids=" + id)
@@ -390,16 +390,15 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
         if (!pr || !pr.variants || !pr.variants[0]) return null;
         var v = pr.variants[0];
         return {
-          title:           pr.title,
-          price:           Math.round(parseFloat(v.price) * 100),
+          title:            pr.title,
+          price:            Math.round(parseFloat(v.price) * 100),
           compare_at_price: v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null,
-          handle:          pr.handle,
-          image:           pr.images && pr.images[0] ? pr.images[0].src : null
+          handle:           pr.handle,
+          image:            pr.images && pr.images[0] ? pr.images[0].src : null
         };
       }).catch(function() { return null; });
   }
 
-  // Unified: get product for a video object (handles both product_ids and product_handle)
   function getVideoProduct(video) {
     if (video.product_ids && video.product_ids.length) {
       return fetchProduct(video.product_ids[0]);
@@ -412,11 +411,11 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
           var pr = d.product;
           var v  = pr.variants[0];
           return {
-            title:           pr.title,
-            price:           Math.round(parseFloat(v.price) * 100),
+            title:            pr.title,
+            price:            Math.round(parseFloat(v.price) * 100),
             compare_at_price: v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null,
-            handle:          pr.handle,
-            image:           pr.images && pr.images[0] ? pr.images[0].src : null
+            handle:           pr.handle,
+            image:            pr.images && pr.images[0] ? pr.images[0].src : null
           };
         }).catch(function() { return null; });
     }
@@ -444,7 +443,7 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
     };
 
     container.addEventListener("scroll", updateArrows, { passive: true });
-    updateArrows(); // set initial state
+    updateArrows();
   }
 
   /* ───────────────────────── Scroll Reveal ──────────────────── */
@@ -507,10 +506,8 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
     popup.classList.add("active");
     document.body.style.overflow = "hidden";
 
-    // Mobile: request fullscreen on the popup
     if (window.innerWidth <= 768) {
       popup.classList.add("nq-popup-mobile");
-      // Show swipe hint briefly
       if (!swipeHintShown) {
         swipeHintShown = true;
         var hint = document.getElementById("nq-swipe-hint-" + bid);
@@ -521,12 +518,10 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
       }
     } else {
       popup.classList.remove("nq-popup-mobile");
-      // Desktop: overlay click closes
       var overlay = document.getElementById("nq-popup-overlay-" + bid);
       if (overlay) overlay.onclick = function() { nqClosePopup(bid); };
     }
 
-    // Attach swipe listeners once
     var wrap = document.getElementById("nq-popup-wrap-" + bid);
     if (wrap && !wrap._nqSwipeInit) {
       wrap._nqSwipeInit = true;
@@ -539,13 +534,10 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
       wrap.addEventListener("touchend", function(e) {
         var dy = touchStartY - e.changedTouches[0].clientY;
         var dx = touchStartX - e.changedTouches[0].clientX;
-        // Only trigger if vertical swipe dominates
         if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50) {
           if (dy > 0) {
-            // Swipe UP → next video
             nqNextVideo(bid);
           } else {
-            // Swipe DOWN → prev video
             nqPrevVideo(bid);
           }
         }
@@ -582,13 +574,33 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
     if (muteBtn) muteBtn.innerHTML = isMuted ? "&#128263;" : "&#128266;";
   };
 
+  /* ── trackView: increment in Supabase + update UI live ── */
   function trackView(video) {
     try {
-      // Track via our Vercel API which uses service role key
       fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + video.id + "&shop=" + shop, {
         method: "GET",
         keepalive: true
-      }).catch(function(){});
+      })
+      .then(function(r) { return r.json(); })
+      .then(function() {
+        // 1. Increment locally so UI updates instantly without waiting for API
+        video.views = (video.views || 0) + 1;
+
+        // 2. Update the view badge on the card in the carousel
+        var cont = document.getElementById("nq-carousel-" + blockId);
+        if (cont) {
+          var cards = cont.querySelectorAll(".nq-card");
+          var idx = allVideos.indexOf(video);
+          if (idx >= 0 && cards[idx]) {
+            var viewEl = cards[idx].querySelector(".nq-views");
+            if (viewEl) viewEl.innerHTML = "&#128065; " + video.views;
+          }
+        }
+
+        // 3. Bust the cache so next page load fetches fresh counts from Supabase
+        bustCache();
+      })
+      .catch(function(){});
     } catch(e) {}
   }
 
@@ -597,15 +609,13 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
     var videoEl = document.getElementById("nq-popup-video-" + bid);
     videoEl.src = video.r2_url;
     videoEl.play();
-    // Track view when popup opens
     trackView(video);
 
     var pd = document.getElementById("nq-popup-product-" + bid);
     pd.innerHTML = "";
 
-    // Support both product_ids (GID array) and product_handle (direct handle)
-    var hasProductIds   = video.product_ids && video.product_ids.length;
-    var hasHandle       = video.product_handle && video.product_handle.length;
+    var hasProductIds = video.product_ids && video.product_ids.length;
+    var hasHandle     = video.product_handle && video.product_handle.length;
 
     console.log("[NQ Popup] video product_ids:", video.product_ids, "| product_handle:", video.product_handle);
 
@@ -644,15 +654,13 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
 <!-- NQ Keep-Warm: fires immediately + every 4min to prevent Vercel cold start -->
 <script>
 (function() {
-  // Only run once per page — use a flag on window
   if (window._nqWarmInit) return;
   window._nqWarmInit = true;
 
   var API  = "https://queuniverse-shoppable.vercel.app/api/videos";
   var shop = "{{ shop.permanent_domain }}";
   var url  = API + "?shop=" + shop;
-  var KEY  = "nq_v3_" + shop;
-  var TTL  = 24 * 60 * 60 * 1000; // 24h
+  var CACHE_KEY = "nq_v3_" + shop;
 
   function ping() {
     fetch(url, { keepalive: true })
@@ -660,23 +668,19 @@ var CACHE_KEY = "nq_v3_" + shop + "_" + today + (productId ? "_pdp_" + productId
       .then(function(data) {
         if (data && data.videos) {
           try {
-            localStorage.setItem(KEY, JSON.stringify({ ts: Date.now(), data: data }));
+            // Keep-warm ping also refreshes the cache with latest view counts
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
           } catch(e) {}
         }
       })
       .catch(function() {
-        // Retry in 20s if failed
         setTimeout(ping, 20000);
       });
   }
 
-  // Ping immediately on page load (wakes Vercel before user scrolls to carousel)
   ping();
-
-  // Keep pinging every 4 minutes while tab is open
   setInterval(ping, 4 * 60 * 1000);
 
-  // Ping again when user returns to the tab after being away
   document.addEventListener("visibilitychange", function() {
     if (document.visibilityState === "visible") ping();
   });
