@@ -616,6 +616,7 @@
 
   window.nqClosePopup = function(bid) {
     if (bid !== blockId) return;
+    stopWatchTracking();
     var popup = document.getElementById("nq-popup-" + bid);
     popup.classList.remove("active", "nq-popup-mobile");
     document.getElementById("nq-popup-video-" + bid).pause();
@@ -644,34 +645,56 @@
   };
 
   /* ── trackView: increment in Supabase + update UI live ── */
-  function trackView(video) {
+  var TRACK = "https://queuniverse-shoppable.vercel.app/api/track";
+
+  function trackEvent(eventType, video, value) {
     try {
-      fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + video.id + "&shop=" + shop, {
-        method: "GET",
-        keepalive: true
-      })
-      .then(function(r) { return r.json(); })
-      .then(function() {
-        // 1. Increment locally so UI updates instantly without waiting for API
-        video.views = (video.views || 0) + 1;
-
-        // 2. Update the view badge on the card in the carousel
-        var cont = document.getElementById("nq-carousel-" + blockId);
-        if (cont) {
-          var cards = cont.querySelectorAll(".nq-card");
-          var idx = allVideos.indexOf(video);
-          if (idx >= 0 && cards[idx]) {
-            var viewEl = cards[idx].querySelector(".nq-views");
-            if (viewEl) viewEl.innerHTML = "&#128065; " + video.views;
-          }
-        }
-
-        // 3. Bust the cache so next page load fetches fresh counts from Supabase
-        bustCache();
-      })
-      .catch(function(){});
+      var params = "?video_id=" + video.id + "&shop=" + shop + "&event=" + eventType;
+      if (value) params += "&value=" + value;
+      fetch(TRACK + params, { method: "GET", keepalive: true }).catch(function(){});
     } catch(e) {}
   }
+
+  function trackView(video) {
+    // Log view event
+    trackEvent("view", video);
+    // Increment locally for instant UI update
+    video.views = (video.views || 0) + 1;
+    var cont = document.getElementById("nq-carousel-" + blockId);
+    if (cont) {
+      var cards = cont.querySelectorAll(".nq-card");
+      var idx = allVideos.indexOf(video);
+      if (idx >= 0 && cards[idx]) {
+        var viewEl = cards[idx].querySelector(".nq-views");
+        if (viewEl) viewEl.innerHTML = "&#128065; " + video.views;
+      }
+    }
+    bustCache();
+  }
+
+  // Track watch time — called every 5s while popup video plays
+  var _watchInterval = null;
+  function startWatchTracking(video) {
+    stopWatchTracking();
+    _watchInterval = setInterval(function() {
+      trackEvent("watch", video, 5); // 5 seconds watched
+    }, 5000);
+  }
+  function stopWatchTracking() {
+    if (_watchInterval) { clearInterval(_watchInterval); _watchInterval = null; }
+  }
+
+  // Global click tracker — reads video id from data attributes
+  window.nqTrackClick = function(el) {
+    try {
+      var vid = el.getAttribute("data-video-id");
+      var sh  = el.getAttribute("data-shop");
+      if (!vid || !sh) return;
+      fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + vid + "&shop=" + sh + "&event=click", {
+        method: "GET", keepalive: true
+      }).catch(function(){});
+    } catch(e) {}
+  };
 
   function showPopup(bid) {
     var video   = allVideos[currentIndex];
@@ -679,6 +702,7 @@
     videoEl.src = video.r2_url;
     videoEl.play();
     trackView(video);
+    startWatchTracking(video);
 
     var pd = document.getElementById("nq-popup-product-" + bid);
     pd.innerHTML = "";
@@ -715,7 +739,7 @@
           '<p class="nq-popup-product-price">' + priceHtml + ' ' + compareHtml + '</p>' +
         '</div>' +
       '</div>' +
-      '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '">SHOP NOW</a>';
+      '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '" data-video-id="' + video.id + '" data-shop="' + shop + '" onclick="nqTrackClick(this)">SHOP NOW</a>';
   }
 })();
 </script>
