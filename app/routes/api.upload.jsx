@@ -1,3 +1,5 @@
+import { authenticate } from "../shopify.server";
+import { supabase } from "../supabase.server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 
@@ -16,8 +18,6 @@ const HEADERS = {
 };
 
 export const action = async ({ request }) => {
-  const { authenticate } = await import("../shopify.server.js");
-  const { supabase } = await import("../supabase.server.js");
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: HEADERS });
   }
