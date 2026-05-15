@@ -286,7 +286,6 @@
 .nq-tile-product_below_3 .nq-below-info,
 .nq-tile-product_below_2 .nq-below-info,
 .nq-tile-product_below .nq-below-info {
-  position: absolute;
   bottom: -78px;
   left: 0;
   right: 0;
