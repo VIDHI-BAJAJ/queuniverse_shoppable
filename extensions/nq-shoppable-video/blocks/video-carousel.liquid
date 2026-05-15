@@ -233,7 +233,6 @@
       case "img_transparent_text_overlay_2":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
         getVideoProduct(video).then(function(p) {
-          if (true) {
             if (!p) return;
             var ov = document.createElement("div");
             ov.className = "nq-ov-transparent";
@@ -242,14 +241,12 @@
               '<span class="nq-ov-title">' + p.title + '</span>';
             card.appendChild(ov);
           });
-        }
         break;
 
       /* 3 — Opaque white card overlapping bottom of video */
       case "img_opaque_text_overlay_3":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;overflow:visible;";
         getVideoProduct(video).then(function(p) {
-          if (true) {
             if (!p) return;
             var ov = document.createElement("div");
             ov.className = "nq-ov-opaque";
@@ -261,7 +258,6 @@
               '</div>';
             card.appendChild(ov);
           });
-        }
         break;
 
       /* 4 — Single tile, smaller, no product */
@@ -275,7 +271,6 @@
       case "product_below":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;overflow:visible;";
         getVideoProduct(video).then(function(p) {
-          if (true) {
             if (!p) return;
             var discHtml = '';
             if (p.compare_at_price && p.compare_at_price > p.price) {
@@ -291,7 +286,6 @@
               '<p class="nq-below-price">&#8377;' + fmt(p.price) + ' ' + discHtml + '</p>';
             card.appendChild(info);
           });
-        }
         break;
 
       /* 7 — Story: circular card */
@@ -304,7 +298,6 @@
       case "feed_view_more":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
         getVideoProduct(video).then(function(p) {
-          if (true) {
             if (!p) return;
             var ov = document.createElement("div");
             ov.className = "nq-ov-transparent";
@@ -313,14 +306,12 @@
               '<span class="nq-ov-title">' + p.title + '</span>';
             card.appendChild(ov);
           });
-        }
         break;
 
       /* 9 — Feed On Scroll: 2-col grid, fade-in, product below */
       case "feed_on_scroll":
         card.classList.add("nq-scroll-fade");
         getVideoProduct(video).then(function(p) {
-          if (true) {
             if (!p) return;
             var priceRow = '&#8377;' + fmt(p.price);
             if (p.compare_at_price && p.compare_at_price > p.price) {
@@ -333,7 +324,6 @@
               '<p class="nq-below-price">' + priceRow + '</p>';
             card.appendChild(info);
           });
-        }
         break;
 
       /* 10 — Grid Theme Border: rounded coloured border, no product info */
@@ -350,7 +340,6 @@
       case "3d_navigation":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
         getVideoProduct(video).then(function(p) {
-          if (true) {
             if (!p) return;
             var ov = document.createElement("div");
             ov.className = "nq-ov-transparent";
@@ -359,7 +348,6 @@
               '<span class="nq-ov-title">' + p.title + '</span>';
             card.appendChild(ov);
           });
-        }
         break;
 
       /* 13 — Minimal */
