@@ -420,63 +420,45 @@
     return (Math.round(parseInt(cents)) / 100).toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0});
   }
 
-  // Product cache — keyed by numeric ID
   var _productCache = {};
-  // Track in-flight fetches to avoid duplicate requests
-  var _productFetching = {};
+  var _allProductsCache = null; // bulk cache of all store products
+
+  // Pre-fetch all products once and cache them all by ID
+  function prefetchAllProducts() {
+    if (_allProductsCache) return _allProductsCache;
+    _allProductsCache = fetch("/products.json?limit=250")
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var products = d.products || [];
+        products.forEach(function(p) {
+          var pid = String(p.id);
+          var pv = p.variants && p.variants[0];
+          if (pv && !_productCache[pid]) {
+            _productCache[pid] = {
+              title:            p.title,
+              price:            Math.round(parseFloat(pv.price) * 100),
+              compare_at_price: pv.compare_at_price ? Math.round(parseFloat(pv.compare_at_price) * 100) : null,
+              handle:           p.handle,
+              image:            p.images && p.images[0] ? p.images[0].src : null
+            };
+          }
+        });
+        return _productCache;
+      }).catch(function() { return {}; });
+    return _allProductsCache;
+  }
+
+  // Start prefetch immediately (non-blocking — cards render while this loads)
+  prefetchAllProducts();
 
   function fetchProduct(productGidOrId) {
     var id = String(productGidOrId).replace("gid://shopify/Product/", "").trim();
     if (!id || id === "undefined") return Promise.resolve(null);
-    // Return from cache
     if (_productCache[id]) return Promise.resolve(_productCache[id]);
-    // Return in-flight promise to avoid duplicate fetches
-    if (_productFetching[id]) return _productFetching[id];
-
-    // Fetch by handle using Shopify AJAX recommendations
-    // We use /recommendations/products.json with the product_id to get related,
-    // but for exact fetch we use the variant-based search
-    // Most reliable: fetch product page JSON by GID via collections
-    var promise = fetch("/products.json?limit=250")
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        var products = d.products || [];
-        var pr = null;
-        for (var i = 0; i < products.length; i++) {
-          if (String(products[i].id) === String(id)) { pr = products[i]; break; }
-        }
-        if (!pr) return null;
-        var v = pr.variants && pr.variants[0];
-        if (!v) return null;
-        var result = {
-          title:            pr.title,
-          price:            Math.round(parseFloat(v.price) * 100),
-          compare_at_price: v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null,
-          handle:           pr.handle,
-          image:            pr.images && pr.images[0] ? pr.images[0].src : null
-        };
-        // Cache all products from this response to avoid future fetches
-        products.forEach(function(p) {
-          var pid = String(p.id);
-          if (!_productCache[pid]) {
-            var pv = p.variants && p.variants[0];
-            if (pv) {
-              _productCache[pid] = {
-                title:            p.title,
-                price:            Math.round(parseFloat(pv.price) * 100),
-                compare_at_price: pv.compare_at_price ? Math.round(parseFloat(pv.compare_at_price) * 100) : null,
-                handle:           p.handle,
-                image:            p.images && p.images[0] ? p.images[0].src : null
-              };
-            }
-          }
-        });
-        delete _productFetching[id];
-        return result;
-      }).catch(function() { delete _productFetching[id]; return null; });
-
-    _productFetching[id] = promise;
-    return promise;
+    // Wait for bulk fetch to complete then return exact product
+    return prefetchAllProducts().then(function(cache) {
+      return cache[id] || null;
+    });
   }
 
   function getVideoProduct(video) {
