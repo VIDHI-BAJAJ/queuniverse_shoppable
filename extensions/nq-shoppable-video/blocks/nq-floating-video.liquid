@@ -120,37 +120,25 @@
 
     if (!cartBtn) return; // no cart button found
 
-    // Logic:
-    // - Button above viewport (not yet scrolled to) → show video
-    // - Button visible on screen → hide video
-    // - Button below viewport (scrolled past) → hide video
+    // Simple rule:
+    // Cart button NOT YET reached (still below viewport) → show video
+    // Cart button visible OR scrolled past → hide video
 
     function checkCartButtonPosition() {
       var rect = cartBtn.getBoundingClientRect();
       var viewH = window.innerHeight;
 
-      // Button is above viewport = user hasn't scrolled to it yet
-      var isAboveViewport = rect.bottom < 0;
-      // Button is visible on screen
-      var isVisible = rect.top < viewH && rect.bottom > 0;
-      // Button is below viewport = user scrolled past it
-      var isBelowViewport = rect.top > viewH;
-
-      if (isAboveViewport) {
-        // User hasn't reached button yet → show video
+      // Button is still below the screen = user hasn't scrolled to it yet
+      if (rect.top > viewH) {
+        // Button not yet reached — show floating video
         showFloat();
-      } else if (isVisible) {
-        // Button is on screen → hide video
-        hideFloat();
-      } else if (isBelowViewport) {
-        // User scrolled past button → hide video
+      } else {
+        // Button is visible OR user scrolled past it — hide floating video
         hideFloat();
       }
     }
 
-    // Run on scroll
     window.addEventListener("scroll", checkCartButtonPosition, { passive: true });
-    // Run on load
     checkCartButtonPosition();
   }
 
