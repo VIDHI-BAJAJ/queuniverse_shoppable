@@ -42,19 +42,27 @@
       videoEl.muted = true;
       videoEl.play().catch(function(){});
 
-      // Track view directly via Supabase
+      // Track view directly via Supabase REST
       try {
         var SUPA_URL = "https://iwcqtqyoymegzosgnaku.supabase.co";
         var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3Y3F0cW95bWVnem9zZ25ha3UiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NzE1Nzc0MCwiZXhwIjoyMDYyNzMzNzQwfQ.Xc6QFMhHxJKJI3PiGmMIJ1r6-xaBtJcNsrPpXk1-wJo";
-        fetch(SUPA_URL + "/rest/v1/rpc/increment_video_views", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": SUPA_KEY,
-            "Authorization": "Bearer " + SUPA_KEY
-          },
-          body: JSON.stringify({ vid: videos[0].id, sid: shop }),
-          keepalive: true
+        var videoId = videos[0].id;
+        fetch(SUPA_URL + "/rest/v1/videos?id=eq." + videoId + "&select=views", {
+          headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var currentViews = (data && data[0] && data[0].views) ? data[0].views : 0;
+          return fetch(SUPA_URL + "/rest/v1/videos?id=eq." + videoId, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": SUPA_KEY,
+              "Authorization": "Bearer " + SUPA_KEY,
+              "Prefer": "return=minimal"
+            },
+            body: JSON.stringify({ views: currentViews + 1 })
+          });
         }).catch(function(){});
       } catch(e) {}
 

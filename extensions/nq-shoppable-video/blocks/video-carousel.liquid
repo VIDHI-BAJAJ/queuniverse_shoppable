@@ -586,17 +586,29 @@
 
   function trackView(video) {
     try {
-      // Call Supabase RPC directly from storefront
-      fetch(SUPA_URL + "/rest/v1/rpc/increment_video_views", {
-        method: "POST",
+      // Step 1: Get current views
+      fetch(SUPA_URL + "/rest/v1/videos?id=eq." + video.id + "&select=views", {
         headers: {
-          "Content-Type": "application/json",
           "apikey": SUPA_KEY,
           "Authorization": "Bearer " + SUPA_KEY
-        },
-        body: JSON.stringify({ vid: video.id, sid: shop }),
-        keepalive: true
-      }).catch(function(){});
+        }
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var currentViews = (data && data[0] && data[0].views) ? data[0].views : 0;
+        // Step 2: Update with incremented value
+        return fetch(SUPA_URL + "/rest/v1/videos?id=eq." + video.id, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Prefer": "return=minimal"
+          },
+          body: JSON.stringify({ views: currentViews + 1 })
+        });
+      })
+      .catch(function(){});
     } catch(e) {}
   }
 
