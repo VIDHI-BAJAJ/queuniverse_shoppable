@@ -1,0 +1,105 @@
+/* ============================================================
+   NQ Floating Video Widget
+   Desktop: bottom-right corner, ~160px wide
+   Mobile:  bottom-left corner, ~110px wide (like Image 1 & 3)
+   ============================================================ */
+
+.nq-float-wrap {
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  z-index: 9000;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+  width: 160px;
+  aspect-ratio: 9/16;
+  background: #000;
+  opacity: 0;
+  transform: translateY(20px) scale(0.92);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  cursor: pointer;
+}
+
+.nq-float-wrap.nq-float-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.nq-float-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Close button */
+.nq-float-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(0,0,0,0.55);
+  border: none;
+  color: #fff;
+  font-size: 11px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  transition: background 0.2s;
+}
+.nq-float-close:hover { background: rgba(0,0,0,0.8); }
+
+/* Mute button */
+.nq-float-mute {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  background: rgba(0,0,0,0.55);
+  border: none;
+  color: #fff;
+  font-size: 11px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.nq-float-video-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  .nq-float-wrap {
+    width: 110px;
+    bottom: 80px; /* above mobile nav bar */
+    right: 12px;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+}
+
+/* ── Bottom-left position variant ── */
+.nq-float-wrap.nq-pos-bottom-left {
+  right: auto;
+  left: 20px;
+}
+@media (max-width: 768px) {
+  .nq-float-wrap.nq-pos-bottom-left {
+    right: auto;
+    left: 12px;
+  }
+}
