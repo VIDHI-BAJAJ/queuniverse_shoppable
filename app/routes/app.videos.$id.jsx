@@ -1,5 +1,4 @@
-import { useLoaderData, Form, Link } from "react-router";
-
+import { useLoaderData, Form, Link, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
 
@@ -32,7 +31,7 @@ export const loader = async ({ request, params }) => {
   const data = await response.json();
   const products = data.data.products.edges.map(e => e.node);
 
-  return json({ video, products });
+  return { video, products };
 };
 
 export const action = async ({ request, params }) => {
@@ -102,7 +101,7 @@ export default function EditVideo() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "10px" }}>
             {products.map((product) => (
               <label key={product.id}
-                style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f4f6f8", padding: "8px", borderRadius: "6px" }}>
+                style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f4f6f8", padding: "8px", borderRadius: "6px", cursor: "pointer" }}>
                 <input type="checkbox" name="product_ids" value={product.id}
                   defaultChecked={video.product_ids?.includes(product.id)} />
                 {product.featuredImage && (
@@ -116,7 +115,7 @@ export default function EditVideo() {
         </div>
 
         <button type="submit"
-          style={{ padding: "12px 24px", background: "#008060", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "16px" }}>
+          style={{ padding: "12px 24px", background: "#008060", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "16px", width: "100%" }}>
           Save Changes
         </button>
       </Form>
