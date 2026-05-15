@@ -1,21 +1,18 @@
 /* ============================================================
-   NQ Floating Video Widget
-   Desktop: bottom-RIGHT corner
-   Mobile:  bottom-LEFT corner
+   NQ Floating Video Widget — compact size
    ============================================================ */
 
-/* Desktop — bottom right */
 .nq-float-wrap {
   position: fixed;
   bottom: 24px;
   right: 20px;
   left: auto;
   z-index: 9000;
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.28);
-  width: 160px;
-  aspect-ratio: 9/16;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.32);
+  width: 110px;
+  height: 155px;
   background: #000;
   opacity: 0;
   transform: translateY(20px) scale(0.92);
@@ -43,14 +40,14 @@
 /* Close button — top right */
 .nq-float-close {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  background: rgba(0,0,0,0.55);
+  top: 5px;
+  right: 5px;
+  background: rgba(0,0,0,0.6);
   border: none;
   color: #fff;
-  font-size: 11px;
-  width: 22px;
-  height: 22px;
+  font-size: 10px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   cursor: pointer;
   z-index: 10;
@@ -62,19 +59,19 @@
   line-height: 1;
   padding: 0;
 }
-.nq-float-close:hover { background: rgba(0,0,0,0.85); }
+.nq-float-close:hover { background: rgba(0,0,0,0.9); }
 
 /* Mute button — bottom right */
 .nq-float-mute {
   position: absolute;
-  bottom: 6px;
-  right: 6px;
-  background: rgba(0,0,0,0.55);
+  bottom: 5px;
+  right: 5px;
+  background: rgba(0,0,0,0.6);
   border: none;
   color: #fff;
-  font-size: 11px;
-  width: 22px;
-  height: 22px;
+  font-size: 10px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   cursor: pointer;
   z-index: 10;
@@ -85,14 +82,14 @@
   padding: 0;
 }
 
-/* ── Mobile — bottom LEFT ── */
+/* Mobile */
 @media (max-width: 768px) {
   .nq-float-wrap {
-    right: auto;        /* remove right positioning */
-    left: 12px;         /* place on LEFT side */
-    bottom: 80px;       /* above mobile bottom nav */
-    width: 110px;
+    right: auto;
+    left: 12px;
+    bottom: 75px;
+    width: 85px;
+    height: 120px;
     border-radius: 10px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
   }
 }
