@@ -1,12 +1,8 @@
-import { redirect } from "react-router";
-import { authenticate } from "../shopify.server";
- 
-export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return redirect("/app/videos");
-};
- 
+// This route is no longer used — import modal is in app.videos.jsx
+// Kept as empty component to avoid 404
 export default function NewVideo() {
+  if (typeof window !== "undefined") {
+    window.location.href = "/app/videos";
+  }
   return null;
 }
- 

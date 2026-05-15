@@ -43,66 +43,20 @@ export const action = async ({ request }) => {
   const actionType = formData.get("action");
 
   try {
-    /* Import from URL */
-    if (actionType === "import_url") {
-      const sourceUrl = formData.get("source_url");
-      const title = formData.get("title") || "Untitled Video";
-      if (!sourceUrl) return { importError: "Please provide a video URL" };
-
-      const response = await fetch(sourceUrl);
-      if (!response.ok) throw new Error("Failed to fetch video: " + response.status);
-      const buffer = Buffer.from(await response.arrayBuffer());
-      const { uploadToR2: _up1 } = await import("../s3.server.js");
-      const { key, url: r2Url } = await _up1(buffer, "video/mp4");
-
-      // Extract thumbnail from uploaded thumbnail blob (sent from client)
-      let thumbnailUrl = null;
-      const thumbBlob = formData.get("thumbnail");
-      if (thumbBlob && thumbBlob.size > 0) {
-        const thumbBuffer = Buffer.from(await thumbBlob.arrayBuffer());
-        const { uploadToR2: _up2 } = await import("../s3.server.js");
-        const { url: thumbUrl1 } = await _up2(thumbBuffer, "image/jpeg");
-        thumbnailUrl = thumbUrl1;
-      }
-
-      const { error } = await supabase.from("videos").insert({
-        shop_id: shop, title, r2_url: r2Url, r2_key: key,
-        source_url: sourceUrl, status: "draft", views: 0, product_ids: [], show_on: [],
-        thumbnail_url: thumbnailUrl,
+    /* Import from URL or file — delegated to api.upload route */
+    if (actionType === "import_url" || actionType === "import_file") {
+      formData.set("type", actionType === "import_url" ? "url" : "file");
+      const uploadRes = await fetch(new URL("/api/upload", request.url).toString(), {
+        method: "POST",
+        headers: { cookie: request.headers.get("cookie") || "" },
+        body: formData,
       });
-      if (error) throw error;
+      const result = await uploadRes.json();
+      if (result.error) return { importError: result.error };
       return { importSuccess: true };
     }
 
-    /* Upload from computer */
-    if (actionType === "import_file") {
-      const file = formData.get("video_file");
-      const title = formData.get("title") || "Untitled Video";
-      if (!file || file.size === 0) return { importError: "Please select a video file" };
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const { uploadToR2: _up3 } = await import("../s3.server.js");
-      const { key, url: r2Url } = await _up3(buffer, file.type || "video/mp4");
-
-      // Extract thumbnail from client-captured frame
-      let thumbnailUrl = null;
-      const thumbBlob2 = formData.get("thumbnail");
-      if (thumbBlob2 && thumbBlob2.size > 0) {
-        const thumbBuffer2 = Buffer.from(await thumbBlob2.arrayBuffer());
-        const { uploadToR2: _up4 } = await import("../s3.server.js");
-        const { url: thumbUrl2 } = await _up4(thumbBuffer2, "image/jpeg");
-        thumbnailUrl = thumbUrl2;
-      }
-
-      const { error } = await supabase.from("videos").insert({
-        shop_id: shop, title: title || file.name.replace(/\.[^.]+$/, ""),
-        r2_url: r2Url, r2_key: key, status: "draft", views: 0, product_ids: [], show_on: [],
-        thumbnail_url: thumbnailUrl,
-      });
-      if (error) throw error;
-      return { importSuccess: true };
-    }
-
-    /* Video management actions */
+        /* Video management actions */
     const id = formData.get("id");
     if (actionType === "delete") {
       await supabase.from("videos").delete().eq("id", id).eq("shop_id", shop);
