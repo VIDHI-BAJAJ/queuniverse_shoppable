@@ -144,7 +144,7 @@
   }
 
   // Step 2: fetch fresh data
-  var apiURL  = API + "?shop=" + shop + "&page=home";
+  var apiURL  = API + "?shop=" + shop; // no page filter — show all live videos
   var giveUp  = setTimeout(function() {
     if (!rendered) {
       var cont = document.getElementById("nq-carousel-" + blockId);
@@ -636,7 +636,7 @@
 
   var API  = "https://queuniverse-shoppable.vercel.app/api/videos";
   var shop = "{{ shop.permanent_domain }}";
-  var url  = API + "?shop=" + shop + "&page=home";
+  var url  = API + "?shop=" + shop;
   var KEY  = "nq_v3_" + shop;
   var TTL  = 24 * 60 * 60 * 1000; // 24h
 
