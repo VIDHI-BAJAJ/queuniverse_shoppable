@@ -142,7 +142,6 @@ export default function Index() {
   const s = {
     page: {
       padding: "28px 32px",
-      fontFamily: "'DM Sans', system-ui, sans-serif",
       background: "#f8f9fb",
       minHeight: "100vh",
     },
@@ -150,7 +149,7 @@ export default function Index() {
       display: "flex", justifyContent: "space-between",
       alignItems: "center", marginBottom: "28px",
     },
-    title: { margin: 0, fontSize: "26px", fontWeight: "700", color: "#fff" },
+    title: { margin: 0, fontSize: "26px", fontWeight: "600", color: "#9a9a93" },
     manageBtn: {
       padding: "10px 22px", background: "#485861", color: "#fff",
       border: "#0a0a0a", borderRadius: "8px", cursor: "pointer",
@@ -200,17 +199,18 @@ export default function Index() {
     chartCard: {
       background: "#fff", borderRadius: "14px",
       padding: "24px", marginBottom: "28px",
-      border: "1px solid #485861",
+      border: "1px solid #f1f5f9",
+      borderTop: "1px solid #485861"
     },
     chartHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" },
     chartTitle: { margin: 0, fontSize: "16px", fontWeight: "500", color: "#0f172a" },
     metricBtns: { display: "flex", gap: "8px" },
     metricBtn: (active, color) => ({
       padding: "6px 16px", borderRadius: "20px", border: "2px solid",
-      borderColor: active ? color : "#e2e8f0",
-      background: active ? color : "#fff",
-      color: active ? "#fff" : "#64748b",
-      cursor: "pointer", fontSize: "13px", fontWeight: "600",
+      borderColor: active ? color : "#485861",
+      background: active ? color : "#485861",
+      color: active ? "#fff" : "#fff",
+      cursor: "pointer", fontSize: "13px", fontWeight: "500",
       transition: "all 0.15s",
     }),
 
@@ -224,11 +224,11 @@ export default function Index() {
     engCard: {
       background: "#fff", borderRadius: "14px",
       padding: "20px 22px",
-      boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
       border: "1px solid #f1f5f9",
+      borderTop: "1px solid #485861"
     },
     engLabel: { fontSize: "12px", fontWeight: "600", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" },
-    engValue: { fontSize: "26px", fontWeight: "800", color: "#0f172a" },
+    engValue: { fontSize: "16px", fontWeight: "500", color: "#0f172a" },
   };
 
   const activeMetricObj = METRICS.find(m => m.key === activeMetric);
@@ -242,7 +242,7 @@ export default function Index() {
           Manage Videos →
         </button>
       </div>
-
+ 
       {/* Date Range Selector */}
       <div style={s.rangeWrap}>
         <span style={s.rangeLabel}>RANGE</span>
@@ -267,7 +267,7 @@ export default function Index() {
           onChange={e => setCustomTo(e.target.value)}
         />
       </div>
-
+ 
       {/* Top Stats Row */}
       <div style={s.statsRow}>
         {stats.map(st => (
@@ -278,7 +278,7 @@ export default function Index() {
           </div>
         ))}
       </div>
-
+ 
       {/* Line Chart */}
       <div style={s.chartCard}>
         <div style={s.chartHeader}>
@@ -295,41 +295,85 @@ export default function Index() {
             ))}
           </div>
         </div>
-        {filteredChart.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "60px", color: "#94a3b8" }}>
-            <div style={{ fontSize: "36px", marginBottom: "12px" }}>📊</div>
-            <p style={{ margin: 0, fontSize: "14px" }}>No data for selected period yet.<br/>Views, clicks and orders will appear here as your videos get engagement.</p>
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={filteredChart} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11, fill: "#94a3b8" }}
-                tickFormatter={d => {
-                  const dt = new Date(d);
-                  return dt.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-                }}
-              />
-              <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} />
-              <Tooltip
-                contentStyle={{ borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "13px" }}
-                labelFormatter={d => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
-              />
-              <Line
-                type="monotone"
-                dataKey={activeMetric}
-                stroke={activeMetricObj.color}
-                strokeWidth={2.5}
-                dot={false}
-                activeDot={{ r: 5 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+        {(() => {
+          // Always build a full date-range skeleton so axes always show
+          const buildDisplayData = () => {
+            let from, to;
+            if (customFrom && customTo) {
+              from = new Date(customFrom); to = new Date(customTo);
+            } else {
+              const days = RANGES[activeRange].days;
+              to = new Date(today);
+              from = days ? new Date(today) : null;
+              if (from && days) from.setDate(from.getDate() - days + 1);
+              if (!from) {
+                // All time: use last 30 days as skeleton minimum
+                from = new Date(today);
+                from.setDate(from.getDate() - 29);
+              }
+            }
+            // Build every date in range with zero fallback
+            const map = {};
+            filteredChart.forEach(r => { map[r.date] = r; });
+            const result = [];
+            const cur = new Date(from);
+            while (cur <= to) {
+              const key = cur.toISOString().slice(0, 10);
+              result.push(map[key] || { date: key, views: 0, clicks: 0, orders: 0 });
+              cur.setDate(cur.getDate() + 1);
+            }
+            return result;
+          };
+ 
+          const displayData = buildDisplayData();
+          const hasRealData = filteredChart.length > 0;
+ 
+          return (
+            <>
+              {!hasRealData && (
+                <p style={{ textAlign: "center", fontSize: "12px", color: "#b0b0aa", marginBottom: "4px", marginTop: 0 }}>
+                  No engagement data yet — axes show your selected date range
+                </p>
+              )}
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={displayData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0ee" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    tickFormatter={d => {
+                      const dt = new Date(d);
+                      return dt.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+                    }}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    allowDecimals={false}
+                    domain={[0, hasRealData ? "auto" : 10]}
+                    tickCount={hasRealData ? undefined : 5}
+                  />
+                  <Tooltip
+                    contentStyle={{ borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "13px" }}
+                    labelFormatter={d => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}
+                    formatter={(value) => [value, activeMetricObj.label]}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey={activeMetric}
+                    stroke={hasRealData ? "#485861" : "#e2e8f0"}
+                    strokeWidth={hasRealData ? 2.5 : 1.5}
+                    strokeDasharray={hasRealData ? "0" : "4 4"}
+                    dot={false}
+                    activeDot={hasRealData ? { r: 5 } : false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </>
+          );
+        })()}
       </div>
-
+ 
       {/* Engagement Metrics */}
       <div style={s.engTitle}>Engagement Overview</div>
       <div style={s.engGrid}>
