@@ -12,7 +12,7 @@
   overflow: hidden;
   box-shadow: 0 8px 32px rgba(0,0,0,0.32);
   width: 60px;
-  height: 65px;
+  height: 95px;
   background: #000;
   opacity: 0;
   transform: translateY(20px) scale(0.92);
@@ -89,7 +89,7 @@
     left: 12px;
     bottom: 75px;
     width: 60px;
-    height: 60px;
+    height: 90px;
     border-radius: 10px;
   }
 }
