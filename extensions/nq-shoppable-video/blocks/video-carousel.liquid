@@ -114,7 +114,14 @@
     if (!cont) { console.log("[NQ] Container not found!"); return; }
     cont.innerHTML = "";
     if (!allVideos.length) {
-      cont.innerHTML = "<p class='nq-empty'>No videos found.</p>";
+      // Hide entire section if no videos (especially on PDP)
+      if (productId) {
+        // On PDP with no tagged videos — hide the whole section
+        var section = cont.closest(".nq-section");
+        if (section) section.style.display = "none";
+      } else {
+        cont.innerHTML = "<p class='nq-empty'>No videos found.</p>";
+      }
       return;
     }
     rendered = true;

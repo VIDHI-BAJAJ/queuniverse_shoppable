@@ -125,9 +125,11 @@ export default function Videos() {
     );
   };
 
-  const filteredProducts = products.filter(p =>
-    p.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProducts = searchQuery.length === 0
+    ? products
+    : products.filter(p =>
+        p.title.toLowerCase().includes(searchQuery.toLowerCase())
+      );
 
   const isOnHomepage = (video) => {
     const showOn = Array.isArray(video.show_on) ? video.show_on : [];
@@ -301,6 +303,11 @@ export default function Videos() {
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "8px 24px" }}>
+              {products.length === 0 ? (
+                <p style={{ textAlign: "center", color: "#6b7280", padding: "20px" }}>⏳ Loading products...</p>
+              ) : filteredProducts.length === 0 ? (
+                <p style={{ textAlign: "center", color: "#6b7280", padding: "20px" }}>No products match your search</p>
+              ) : null}
               {filteredProducts.map(product => {
                 const isSelected = selectedProducts.includes(product.id);
                 return (
