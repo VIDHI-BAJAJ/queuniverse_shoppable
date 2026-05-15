@@ -82,9 +82,9 @@ const RANGES = [
 ];
 
 const METRICS = [
-  { key: "views",  label: "Watch Time (Views)", color: "#6366f1" },
-  { key: "clicks", label: "Video Clicks",        color: "#ec4899" },
-  { key: "orders", label: "Orders",              color: "#10b981" },
+  { key: "views",  label: "Watch Time (Views)", color: "#485861;" },
+  { key: "clicks", label: "Video Clicks",        color: "#485861;" },
+  { key: "orders", label: "Orders",              color: "#485861;" },
 ];
 
 function fmtINR(v) {
@@ -150,25 +150,27 @@ export default function Index() {
       display: "flex", justifyContent: "space-between",
       alignItems: "center", marginBottom: "28px",
     },
-    title: { margin: 0, fontSize: "26px", fontWeight: "700", color: "#0f172a" },
+    title: { margin: 0, fontSize: "26px", fontWeight: "700", color: "#fff" },
     manageBtn: {
-      padding: "10px 22px", background: "#008060", color: "#fff",
-      border: "none", borderRadius: "8px", cursor: "pointer",
-      fontSize: "14px", fontWeight: "600",
+      padding: "10px 22px", background: "#485861", color: "#fff",
+      border: "#0a0a0a", borderRadius: "8px", cursor: "pointer",
+      fontSize: "14px", fontWeight: "500",
     },
 
     // Range selector
     rangeWrap: {
-      display: "flex", alignItems: "center", gap: "8px",
-      marginBottom: "28px", flexWrap: "wrap",
+      display: "flex", alignItems: "center",
+    gap: "6px", marginBottom: "24px",
+    flexWrap: "wrap", padding: "12px 16px",
+    background: "#fafaf8", borderRadius: "10px",
+    border: "1px solid #f0f0ee"
     },
     rangeLabel: { fontSize: "13px", fontWeight: "600", color: "#64748b", marginRight: "4px" },
     rangeBtn: (active) => ({
-      padding: "7px 16px", borderRadius: "20px", border: "none",
-      cursor: "pointer", fontSize: "13px", fontWeight: "600",
-      background: active ? "#0f172a" : "#fff",
-      color: active ? "#fff" : "#475569",
-      boxShadow: active ? "none" : "0 1px 3px rgba(0,0,0,0.1)",
+      padding: "6px 12px", borderRadius: "20px", border: "none",
+      cursor: "pointer", fontSize: "12px", fontWeight: "500",
+      background: active ? "#485861" : "#fff",
+      color: active ? "#fff" : "#6b6b66",
       transition: "all 0.15s",
     }),
     dateInput: {
@@ -185,25 +187,23 @@ export default function Index() {
       gap: "16px", marginBottom: "28px",
     },
     statCard: {
-      background: "#fff", borderRadius: "14px",
+      background: "#fff", borderRadius: "10px",
       padding: "20px 18px",
       boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
-      border: "1px solid #f1f5f9",
+      border: "1px solid #f1f5f9", borderTop: "1px solid #485861"
     },
-    statIcon: { fontSize: "22px", marginBottom: "10px" },
-    statLabel: { fontSize: "12px", fontWeight: "600", color: "#64748b", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" },
-    statValue: { fontSize: "28px", fontWeight: "800", color: "#0f172a", lineHeight: 1 },
-    statSub:   { fontSize: "11px", color: "#94a3b8", marginTop: "6px" },
+    statLabel: { fontSize: "12px", fontWeight: "500", color: "#9a9a93", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" },
+    statValue: { fontSize: "28px", fontWeight: "300", color: "#0a0a0a", lineHeight: 1 },
+    statSub:   { fontSize: "11px", color: "#9a9a93", marginTop: "6px" },
 
     // Chart card
     chartCard: {
       background: "#fff", borderRadius: "14px",
       padding: "24px", marginBottom: "28px",
-      boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
-      border: "1px solid #f1f5f9",
+      border: "1px solid #485861",
     },
     chartHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" },
-    chartTitle: { margin: 0, fontSize: "16px", fontWeight: "700", color: "#0f172a" },
+    chartTitle: { margin: 0, fontSize: "16px", fontWeight: "500", color: "#0f172a" },
     metricBtns: { display: "flex", gap: "8px" },
     metricBtn: (active, color) => ({
       padding: "6px 16px", borderRadius: "20px", border: "2px solid",
@@ -272,7 +272,6 @@ export default function Index() {
       <div style={s.statsRow}>
         {stats.map(st => (
           <div key={st.label} style={s.statCard}>
-            <div style={s.statIcon}>{st.icon}</div>
             <div style={s.statLabel}>{st.label}</div>
             <div style={s.statValue}>{st.value}</div>
             <div style={s.statSub}>{st.sub}</div>
@@ -332,7 +331,7 @@ export default function Index() {
       </div>
 
       {/* Engagement Metrics */}
-      <div style={s.engTitle}>📈 Engagement Overview</div>
+      <div style={s.engTitle}>Engagement Overview</div>
       <div style={s.engGrid}>
         {engagement.map(e => (
           <div key={e.label} style={s.engCard}>
