@@ -42,6 +42,16 @@
       videoEl.muted = true;
       videoEl.play().catch(function(){});
 
+      // Track view
+      try {
+        fetch("https://queuniverse-shoppable.vercel.app/api/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ video_id: videos[0].id, shop: shop }),
+          keepalive: true
+        }).catch(function(){});
+      } catch(e) {}
+
       // Show the widget
       wrap.style.display = "block";
       setTimeout(function() { wrap.classList.add("nq-float-visible"); }, 100);

@@ -581,11 +581,24 @@
     if (muteBtn) muteBtn.innerHTML = isMuted ? "&#128263;" : "&#128266;";
   };
 
+  function trackView(video) {
+    try {
+      fetch("https://queuniverse-shoppable.vercel.app/api/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_id: video.id, shop: shop }),
+        keepalive: true
+      }).catch(function(){});
+    } catch(e) {}
+  }
+
   function showPopup(bid) {
     var video   = allVideos[currentIndex];
     var videoEl = document.getElementById("nq-popup-video-" + bid);
     videoEl.src = video.r2_url;
     videoEl.play();
+    // Track view when popup opens
+    trackView(video);
 
     var pd = document.getElementById("nq-popup-product-" + bid);
     pd.innerHTML = "";
