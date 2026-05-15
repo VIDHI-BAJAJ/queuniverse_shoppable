@@ -29,23 +29,42 @@ export const loader = async ({ request }) => {
       return new Response(JSON.stringify({ videos: [] }), { headers });
     }
 
-    let query = supabase
+    // Fetch all live videos for this shop, filter in JS
+    const { data: videos, error } = await supabase
       .from("videos")
       .select("id, title, r2_url, thumbnail_url, product_ids, show_on, views")
       .eq("shop_id", shop)
       .eq("status", "live");
 
-    if (page === "home") {
-      // FIXED: pass array directly, not JSON.stringify
-      query = query.contains("show_on", ["home"]);
-    } else if (page === "pdp" && productId) {
-      query = query.contains("product_ids", [productId]);
-    }
-
-    const { data: videos, error } = await query;
     if (error) throw error;
 
-    return new Response(JSON.stringify({ videos: videos || [] }), { headers });
+    // Filter by show_on in JavaScript to avoid Supabase JSON type issues
+    let filtered = videos || [];
+
+    if (page === "home") {
+      filtered = filtered.filter((v) => {
+        if (!v.show_on) return false;
+        // Handle both array and JSON string formats
+        const showOn = Array.isArray(v.show_on)
+          ? v.show_on
+          : typeof v.show_on === "string"
+          ? JSON.parse(v.show_on)
+          : [];
+        return showOn.includes("home");
+      });
+    } else if (page === "pdp" && productId) {
+      filtered = filtered.filter((v) => {
+        if (!v.product_ids) return false;
+        const ids = Array.isArray(v.product_ids)
+          ? v.product_ids
+          : typeof v.product_ids === "string"
+          ? JSON.parse(v.product_ids)
+          : [];
+        return ids.includes(productId);
+      });
+    }
+
+    return new Response(JSON.stringify({ videos: filtered }), { headers });
 
   } catch (err) {
     return new Response(
