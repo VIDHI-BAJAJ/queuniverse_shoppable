@@ -236,6 +236,31 @@
 
   doFetch(3);
 
+  /* ── Re-render on back/forward navigation (bfcache restore) ── */
+  window.addEventListener("pageshow", function(e) {
+    if (e.persisted) {
+      // Page restored from bfcache — re-render if container is empty
+      var cont = document.getElementById("nq-carousel-" + blockId);
+      if (cont && cont.querySelectorAll(".nq-card").length === 0) {
+        rendered = false;
+        bustCache(); // force fresh fetch
+        doFetch(3);
+      }
+    }
+  });
+
+  /* ── Re-render when tab becomes visible after being hidden ── */
+  document.addEventListener("visibilitychange", function() {
+    if (document.visibilityState === "visible") {
+      var cont = document.getElementById("nq-carousel-" + blockId);
+      if (cont && cont.querySelectorAll(".nq-card").length === 0) {
+        rendered = false;
+        bustCache();
+        doFetch(3);
+      }
+    }
+  });
+
   /* ── Refresh all view counters on cards after fresh fetch ── */
   function refreshAllViewCounters() {
     var cont = document.getElementById("nq-carousel-" + blockId);
@@ -714,14 +739,14 @@
 
     if (hasProductIds || hasHandle) {
       getVideoProduct(video).then(function(p) {
-        renderPopupProduct(pd, p);
+        renderPopupProduct(pd, p, video);
       });
     } else {
       console.log("[NQ Popup] No product linked to this video.");
     }
   }
 
-  function renderPopupProduct(pd, p) {
+  function renderPopupProduct(pd, p, video) {
     if (!p) { console.log("[NQ] fetchProduct returned null"); return; }
     console.log("[NQ] Rendering product:", p.title, p.price, p.handle);
 
@@ -730,6 +755,7 @@
     if (p.compare_at_price && p.compare_at_price > p.price) {
       compareHtml = '<span class="nq-popup-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
     }
+    var videoId = video ? video.id : '';
 
     pd.innerHTML =
       '<div class="nq-popup-product-card">' +
@@ -739,7 +765,7 @@
           '<p class="nq-popup-product-price">' + priceHtml + ' ' + compareHtml + '</p>' +
         '</div>' +
       '</div>' +
-      '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '" data-video-id="' + video.id + '" data-shop="' + shop + '" onclick="nqTrackClick(this)">SHOP NOW</a>';
+      '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '" data-video-id="' + videoId + '" data-shop="' + shop + '" onclick="nqTrackClick(this)">SHOP NOW</a>';
   }
 })();
 </script>
