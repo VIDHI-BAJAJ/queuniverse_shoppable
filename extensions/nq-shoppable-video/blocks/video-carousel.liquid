@@ -417,22 +417,27 @@
     if (!id || id === "undefined") return Promise.resolve(null);
     if (_productCache[id]) return Promise.resolve(_productCache[id]);
 
-    // Fetch from our Vercel API which has Shopify Admin access — guaranteed correct product
-    return fetch("https://queuniverse-shoppable.vercel.app/api/product?id=" + id + "&shop=" + shop)
+    return fetch("/products.json?ids=" + id)
       .then(function(r) { return r.json(); })
       .then(function(d) {
-        if (!d || !d.title) return null;
+        var products = d.products || [];
+        var pr = null;
+        for (var i = 0; i < products.length; i++) {
+          if (String(products[i].id) === String(id)) { pr = products[i]; break; }
+        }
+        if (!pr) return null;
+        var v = pr.variants && pr.variants[0];
+        if (!v) return null;
         var result = {
-          title:            d.title,
-          price:            d.price,
-          compare_at_price: d.compare_at_price || null,
-          handle:           d.handle,
-          image:            d.image || null
+          title:            pr.title,
+          price:            Math.round(parseFloat(v.price) * 100),
+          compare_at_price: v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null,
+          handle:           pr.handle,
+          image:            pr.images && pr.images[0] ? pr.images[0].src : null
         };
         _productCache[id] = result;
         return result;
-      })
-      .catch(function() { return null; });
+      }).catch(function() { return null; });
   }
 
   function getVideoProduct(video) {
