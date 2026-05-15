@@ -55,7 +55,13 @@ export default defineConfig({
   build: {
     assetsInlineLimit: 0,
   },
+  ssr: {
+    // These packages are server-only and must never be bundled for the client
+    noExternal: [],
+    external: ["@aws-sdk/client-s3", "@aws-sdk/client-s3-presigned-post", "uuid"],
+  },
   optimizeDeps: {
     include: ["@shopify/app-bridge-react"],
+    exclude: ["@aws-sdk/client-s3"],
   },
 });
