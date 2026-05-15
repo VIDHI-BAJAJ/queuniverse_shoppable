@@ -258,20 +258,13 @@
     videoEl.playsInline = true;
     videoEl.className   = "nq-video-el";
     // Show thumbnail as poster so card never shows black while loading
-    if (video.thumbnail_url) {
-      videoEl.poster = video.thumbnail_url;
-      videoEl.preload = "none"; // thumbnail covers, lazy load video
-    } else {
-      // No thumbnail — preload metadata so first frame shows
-      videoEl.preload = "metadata";
-      videoEl.src = video.r2_url; // load immediately so first frame appears
-    }
+    // Always lazy-load — thumbnail covers black, no src until hover/visible
+    videoEl.preload = "none";
+    if (video.thumbnail_url) videoEl.poster = video.thumbnail_url;
     videoEl.dataset.src = video.r2_url;
 
     card.onmouseenter = function() {
-      if (videoEl.dataset.src && videoEl.src !== videoEl.dataset.src && !videoEl.src.includes(videoEl.dataset.src.split("/").pop())) {
-        videoEl.src = videoEl.dataset.src;
-      }
+      if (!videoEl.src && videoEl.dataset.src) videoEl.src = videoEl.dataset.src;
       videoEl.play().catch(function(){});
     };
     card.onmouseleave = function() { videoEl.pause(); videoEl.currentTime = 0; };
@@ -427,15 +420,24 @@
     return (Math.round(parseInt(cents)) / 100).toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0});
   }
 
-  // Product cache so we don't re-fetch the same product multiple times
+  // Product cache — keyed by numeric ID
   var _productCache = {};
+  // Track in-flight fetches to avoid duplicate requests
+  var _productFetching = {};
 
   function fetchProduct(productGidOrId) {
     var id = String(productGidOrId).replace("gid://shopify/Product/", "").trim();
     if (!id || id === "undefined") return Promise.resolve(null);
+    // Return from cache
     if (_productCache[id]) return Promise.resolve(_productCache[id]);
+    // Return in-flight promise to avoid duplicate fetches
+    if (_productFetching[id]) return _productFetching[id];
 
-    return fetch("/products.json?ids=" + id)
+    // Fetch by handle using Shopify AJAX recommendations
+    // We use /recommendations/products.json with the product_id to get related,
+    // but for exact fetch we use the variant-based search
+    // Most reliable: fetch product page JSON by GID via collections
+    var promise = fetch("/products.json?limit=250")
       .then(function(r) { return r.json(); })
       .then(function(d) {
         var products = d.products || [];
@@ -453,9 +455,28 @@
           handle:           pr.handle,
           image:            pr.images && pr.images[0] ? pr.images[0].src : null
         };
-        _productCache[id] = result;
+        // Cache all products from this response to avoid future fetches
+        products.forEach(function(p) {
+          var pid = String(p.id);
+          if (!_productCache[pid]) {
+            var pv = p.variants && p.variants[0];
+            if (pv) {
+              _productCache[pid] = {
+                title:            p.title,
+                price:            Math.round(parseFloat(pv.price) * 100),
+                compare_at_price: pv.compare_at_price ? Math.round(parseFloat(pv.compare_at_price) * 100) : null,
+                handle:           p.handle,
+                image:            p.images && p.images[0] ? p.images[0].src : null
+              };
+            }
+          }
+        });
+        delete _productFetching[id];
         return result;
-      }).catch(function() { return null; });
+      }).catch(function() { delete _productFetching[id]; return null; });
+
+    _productFetching[id] = promise;
+    return promise;
   }
 
   function getVideoProduct(video) {
