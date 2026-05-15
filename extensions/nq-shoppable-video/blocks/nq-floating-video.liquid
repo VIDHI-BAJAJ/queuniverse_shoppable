@@ -42,27 +42,10 @@
       videoEl.muted = true;
       videoEl.play().catch(function(){});
 
-      // Track view directly via Supabase REST
+      // Track view via Vercel API (uses service role key securely)
       try {
-        var SUPA_URL = "https://iwcqtqyoymegzosgnaku.supabase.co";
-        var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3Y3F0cW95bWVnem9zZ25ha3UiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc0NzE1Nzc0MCwiZXhwIjoyMDYyNzMzNzQwfQ.Xc6QFMhHxJKJI3PiGmMIJ1r6-xaBtJcNsrPpXk1-wJo";
-        var videoId = videos[0].id;
-        fetch(SUPA_URL + "/rest/v1/videos?id=eq." + videoId + "&select=views", {
-          headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY }
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          var currentViews = (data && data[0] && data[0].views) ? data[0].views : 0;
-          return fetch(SUPA_URL + "/rest/v1/videos?id=eq." + videoId, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": SUPA_KEY,
-              "Authorization": "Bearer " + SUPA_KEY,
-              "Prefer": "return=minimal"
-            },
-            body: JSON.stringify({ views: currentViews + 1 })
-          });
+        fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + videos[0].id + "&shop=" + shop, {
+          keepalive: true
         }).catch(function(){});
       } catch(e) {}
 
