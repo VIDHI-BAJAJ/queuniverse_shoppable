@@ -145,24 +145,16 @@ export default function Videos() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProducts, setSelectedProducts] = useState([]);
 
-  const isImporting = navigation.state === "submitting" &&
-    ["import_url", "import_file"].includes(navigation.formData?.get("action"));
+  // fetcher drives both import forms — state tracks in-flight, data has result
+  const isImporting = fetcher.state !== "idle";
 
-  /* Close import modal on success */
+  // Close modal + reset when import succeeds
   useEffect(() => {
-    if (fetcher.data?.importSuccess || (navigation.state === "idle" && navigation.formData?.get("action")?.startsWith("import"))) {
-      // handled by page reload via form submission
-    }
-  }, [fetcher.data]);
-
-  // Close modal when import succeeds (action returns importSuccess)
-  const actionData = fetcher.data;
-  useEffect(() => {
-    if (actionData?.importSuccess) {
+    if (fetcher.data?.importSuccess) {
       setShowImport(false);
       setSelectedFile(null);
     }
-  }, [actionData]);
+  }, [fetcher.data]);
 
   const C = {
     bg: "#f8f9fb", card: "#fff", border: "#f0f0ee",
@@ -341,15 +333,15 @@ export default function Videos() {
             </div>
 
             {/* Error */}
-            {actionData?.importError && (
+            {fetcher.data?.importError && (
               <div style={{ margin: "14px 28px 0", padding: "10px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "8px", color: "#dc2626", fontSize: "13px" }}>
-                ❌ {actionData.importError}
+                ❌ {fetcher.data.importError}
               </div>
             )}
 
             {/* ── URL tab ── */}
             {importTab === "url" && (
-              <Form method="post" style={{ padding: "24px 28px 28px" }}>
+              <fetcher.Form method="post" style={{ padding: "24px 28px 28px" }}>
                 <input type="hidden" name="action" value="import_url" />
                 <div style={{ marginBottom: "16px" }}>
                   <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: C.text, marginBottom: "6px" }}>
@@ -379,12 +371,12 @@ export default function Videos() {
                   {isImporting ? "⏳ Uploading..." : "Import Video"}
                 </button>
                 {isImporting && <p style={{ textAlign: "center", color: C.muted, marginTop: "10px", fontSize: "12px" }}>This may take a minute for large files...</p>}
-              </Form>
+              </fetcher.Form>
             )}
 
             {/* ── File upload tab ── */}
             {importTab === "file" && (
-              <Form method="post" encType="multipart/form-data" style={{ padding: "24px 28px 28px" }}>
+              <fetcher.Form method="post" encType="multipart/form-data" style={{ padding: "24px 28px 28px" }}>
                 <input type="hidden" name="action" value="import_file" />
                 <div style={{ marginBottom: "16px" }}>
                   <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: C.text, marginBottom: "6px" }}>
@@ -442,7 +434,7 @@ export default function Videos() {
                   {isImporting ? "⏳ Uploading..." : "Upload Video"}
                 </button>
                 {isImporting && <p style={{ textAlign: "center", color: C.muted, marginTop: "10px", fontSize: "12px" }}>Please don't close this tab while uploading...</p>}
-              </Form>
+              </fetcher.Form>
             )}
           </div>
         </div>
