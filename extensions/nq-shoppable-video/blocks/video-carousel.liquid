@@ -136,16 +136,11 @@
   function renderVideos(data) {
     var raw = (data && data.videos) ? data.videos : [];
 
-    // Client-side filter: homepage shows only show_on=home, PDP shows only matching product
+    // Homepage: show ALL videos — no filtering by show_on
+    // PDP: filter to videos tagged with this product only
     if (!productId) {
-      // Homepage — try to filter to home-tagged videos, but ALWAYS fallback to all videos
-      var homeFiltered = raw.filter(function(v) {
-        var showOn = Array.isArray(v.show_on) ? v.show_on : (v.show_on ? [String(v.show_on)] : []);
-        return showOn.indexOf("home") >= 0;
-      });
-      // Never leave homepage blank — if filter returns nothing, show everything
-      allVideos = homeFiltered.length > 0 ? homeFiltered : raw;
-      console.log("[NQ] home-filtered:", homeFiltered.length, "→ showing:", allVideos.length);
+      allVideos = raw;
+      console.log("[NQ] homepage — showing all", allVideos.length, "videos");
     } else {
       // PDP — filter to videos tagged with this product
       var gid = "gid://shopify/Product/" + productId;
