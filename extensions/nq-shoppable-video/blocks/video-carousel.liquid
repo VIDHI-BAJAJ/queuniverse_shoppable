@@ -717,7 +717,6 @@
 
   function renderPopupProduct(pd, p, video) {
     if (!p) { console.log("[NQ] fetchProduct returned null"); return; }
-    console.log("[NQ] Rendering product:", p.title, p.price, p.handle);
 
     var priceHtml   = '&#8377;' + fmt(p.price);
     var compareHtml = '';
@@ -734,16 +733,21 @@
           '<p class="nq-popup-product-price">' + priceHtml + ' ' + compareHtml + '</p>' +
         '</div>' +
       '</div>' +
-      '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '" id="nq-shop-btn-' + blockId + '">SHOP NOW</a>';
+      '<a href="#" class="nq-popup-shop-btn" style="background:' + btnColor + '" id="nq-shop-btn-' + blockId + '" data-handle="' + p.handle + '">SHOP NOW</a>';
 
     setTimeout(function() {
       var btn = document.getElementById("nq-shop-btn-" + blockId);
       if (btn) {
-        btn.addEventListener("click", function() {
+        btn.addEventListener("click", function(e) {
+          e.preventDefault();
+          var handle = btn.getAttribute("data-handle");
           try {
             new Image().src = TRACK + "?video_id=" + videoId + "&shop=" + shop + "&event=click";
             sessionStorage.setItem("nq_last_video", JSON.stringify({ id: videoId, shop: shop, ts: Date.now() }));
-          } catch(e) {}
+          } catch(err) {}
+          setTimeout(function() {
+            window.location.href = "/products/" + handle;
+          }, 300);
         });
       }
     }, 0);
