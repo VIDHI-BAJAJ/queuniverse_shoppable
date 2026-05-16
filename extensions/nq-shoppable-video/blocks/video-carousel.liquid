@@ -814,16 +814,20 @@
   var shop = "{{ shop.permanent_domain }}";
   // Keep-warm pings homepage context — uses correct cache key matching the carousel
   var url  = API + "?shop=" + shop;
-  var CACHE_KEY = "nq_v3_" + shop + "_home";
+  var CACHE_KEY = "nq_v5_" + shop + "_home";
 
   function ping() {
     fetch(url, { keepalive: true })
       .then(function(r) { return r.json(); })
       .then(function(data) {
+        // Keep-warm: only update cache if carousel hasn't loaded yet
+        // This prevents overwriting fresher data the carousel already has
         if (data && data.videos && data.videos.length > 0) {
           try {
-            // Only cache if we got actual videos — never cache empty response
-            localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+            var existing = localStorage.getItem(CACHE_KEY);
+            if (!existing) {
+              localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+            }
           } catch(e) {}
         }
       })
