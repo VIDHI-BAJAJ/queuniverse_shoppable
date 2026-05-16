@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, useRevalidator } from "react-router";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
 import { useState, useMemo } from "react";
@@ -11,7 +11,7 @@ export const loader = async ({ request }) => {
     // Read from videos table — this is where clicks and views are actually stored
     const { data: videos } = await supabase
       .from("videos")
-      .select("id, status, views, buy_now_clicks, created_at, product_ids")
+      .select("id, status, views, buy_now_clicks, watch_seconds, created_at, product_ids")
       .eq("shop_id", shop);
 
     // Also read video_events for watch time and orders (if they exist)
@@ -21,19 +21,30 @@ export const loader = async ({ request }) => {
       .eq("shop_id", shop)
       .order("created_at", { ascending: true });
 
-    const total        = videos?.length || 0;
-    const live         = videos?.filter(v => v.status === "live").length || 0;
-    const totalViews   = videos?.reduce((sum, v) => sum + (v.views || 0), 0) || 0;
-    const totalClicks  = videos?.reduce((sum, v) => sum + (v.buy_now_clicks || 0), 0) || 0;
+    const total             = videos?.length || 0;
+    const live              = videos?.filter(v => v.status === "live").length || 0;
+    const totalViews        = videos?.reduce((sum, v) => sum + (v.views || 0), 0) || 0;
+    const totalClicks       = videos?.reduce((sum, v) => sum + (v.buy_now_clicks || 0), 0) || 0;
+    const totalWatchSeconds = videos?.reduce((sum, v) => sum + (v.watch_seconds || 0), 0) || 0;
 
-    return {
-      total, live, totalViews, totalClicks,
+    const payload = {
+      total, live, totalViews, totalClicks, totalWatchSeconds,
       videos: videos || [],
       events: events || [],
     };
+    // No-cache so every page load fetches fresh data from Supabase
+    return new Response(JSON.stringify(payload), {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+      },
+    });
   } catch (e) {
     console.error("Dashboard loader error:", e);
-    return { total: 0, live: 0, totalViews: 0, totalClicks: 0, videos: [], events: [] };
+    const fallback = { total: 0, live: 0, totalViews: 0, totalClicks: 0, totalWatchSeconds: 0, videos: [], events: [] };
+    return new Response(JSON.stringify(fallback), {
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
   }
 };
 
@@ -52,8 +63,9 @@ function fmtNum(v) {
 }
 
 export default function Index() {
-  const data     = useLoaderData();
-  const navigate = useNavigate();
+  const data        = useLoaderData();
+  const navigate    = useNavigate();
+  const revalidator = useRevalidator();
 
   const [activeRange, setActiveRange] = useState(1); // default: Last 30 days
   const [customFrom, setCustomFrom]   = useState("");
@@ -101,12 +113,15 @@ export default function Index() {
     const displayViews  = data.totalViews;   // total across all time from videos table
     const totalClicks   = data.totalClicks;  // total across all time from videos table
 
-    // Watch time and orders come from video_events (if populated)
-    const watchSec   = filteredEvents.filter(e => e.event_type === "watch")
-                         .reduce((s, e) => s + (e.value || 0), 0);
-    const orders     = filteredEvents.filter(e => e.event_type === "order").length;
-    const revenue    = filteredEvents.filter(e => e.event_type === "order")
-                         .reduce((s, e) => s + (e.value || 0), 0);
+    // Watch time from videos table (reliable) — fall back to video_events if needed
+    const watchSecFromVideos  = data.totalWatchSeconds || 0;
+    const watchSecFromEvents  = filteredEvents.filter(e => e.event_type === "watch")
+                                  .reduce((s, e) => s + (e.value || 0), 0);
+    const watchSec = watchSecFromVideos > 0 ? watchSecFromVideos : watchSecFromEvents;
+
+    const orders   = filteredEvents.filter(e => e.event_type === "order").length;
+    const revenue  = filteredEvents.filter(e => e.event_type === "order")
+                       .reduce((s, e) => s + (e.value || 0), 0);
 
     const watchHours     = (watchSec / 3600).toFixed(1);
     const avgOrderValue  = orders > 0 ? revenue / orders : 0;
@@ -161,9 +176,17 @@ export default function Index() {
       {/* Header */}
       <div style={s.header}>
         <h1 style={s.title}>NQ-Shoppable Dashboard</h1>
-        <button style={s.manageBtn} onClick={() => navigate("/app/videos")}>
-          Manage Videos →
-        </button>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            style={{ ...s.manageBtn, background: "#fff", color: "#485861", border: "1.5px solid #485861" }}
+            onClick={() => revalidator.revalidate()}
+          >
+            {revalidator.state === "loading" ? "Refreshing..." : "↻ Refresh"}
+          </button>
+          <button style={s.manageBtn} onClick={() => navigate("/app/videos")}>
+            Manage Videos →
+          </button>
+        </div>
       </div>
 
       {/* Date Range Selector */}
