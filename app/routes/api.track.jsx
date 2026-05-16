@@ -23,43 +23,48 @@ async function handleTrack(request) {
       return new Response(JSON.stringify({ ok: false, error: "Missing params" }), { headers: HEADERS });
     }
 
-    // 1. Increment counters on videos table
-    if (event === "view" || event === "click") {
-      const col = event === "view" ? "views" : "buy_now_clicks";
-      const { data } = await supabase
-        .from("videos")
-        .select(col)
-        .eq("id", videoId)
-        .eq("shop_id", shop)
-        .single();
+    // Read current video row once
+    const { data: video } = await supabase
+      .from("videos")
+      .select("views, buy_now_clicks, watch_seconds")
+      .eq("id", videoId)
+      .eq("shop_id", shop)
+      .single();
 
-      if (data) {
-        // For click: only update if buy_now_clicks column exists
-        if (event === "view" || data[col] !== undefined) {
-          await supabase
-            .from("videos")
-            .update({ [col]: (data[col] || 0) + 1 })
-            .eq("id", videoId)
-            .eq("shop_id", shop);
+    if (video) {
+      let updateObj = {};
+
+      if (event === "view") {
+        updateObj.views = (video.views || 0) + 1;
+      }
+
+      if (event === "click") {
+        updateObj.buy_now_clicks = (video.buy_now_clicks || 0) + 1;
+      }
+
+      if (event === "watch" && value > 0) {
+        // watch_seconds column — add if exists, skip gracefully if not
+        if (video.watch_seconds !== undefined) {
+          updateObj.watch_seconds = (video.watch_seconds || 0) + value;
         }
+      }
+
+      if (Object.keys(updateObj).length > 0) {
+        await supabase
+          .from("videos")
+          .update(updateObj)
+          .eq("id", videoId)
+          .eq("shop_id", shop);
       }
     }
 
-    // 2. Always log to video_events — this is what the dashboard reads
-    const { error: insertError } = await supabase
-      .from("video_events")
-      .insert({
-        shop_id:    shop,
-        video_id:   videoId,
-        event_type: event,
-        value:      value,
-      });
-
-    if (insertError) {
-      console.error("video_events insert error:", insertError.message);
-      // Return ok=true so the client doesn't retry — views.views already incremented
-      return new Response(JSON.stringify({ ok: true, warning: insertError.message }), { headers: HEADERS });
-    }
+    // Also try to log to video_events (best effort — dashboard uses videos table now)
+    await supabase.from("video_events").insert({
+      shop_id:    shop,
+      video_id:   videoId,
+      event_type: event,
+      value:      value,
+    }).catch(() => {}); // ignore errors — videos table is the source of truth
 
     return new Response(JSON.stringify({ ok: true, event }), { headers: HEADERS });
   } catch (e) {
@@ -67,8 +72,5 @@ async function handleTrack(request) {
   }
 }
 
-/* GET — all tracking events (view, watch, click) */
 export const loader = async ({ request }) => handleTrack(request);
-
-/* POST — fallback for sendBeacon if ever used */
-export const action = async ({ request }) => handleTrack(request);
+export const action  = async ({ request }) => handleTrack(request);

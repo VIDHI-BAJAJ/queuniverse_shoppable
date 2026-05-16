@@ -8,30 +8,32 @@ export const loader = async ({ request }) => {
   const shop = session.shop;
 
   try {
+    // Read from videos table — this is where clicks and views are actually stored
     const { data: videos } = await supabase
       .from("videos")
-      .select("id, status, views, created_at, product_ids")
+      .select("id, status, views, buy_now_clicks, created_at, product_ids")
       .eq("shop_id", shop);
 
-    // Fetch ALL events — we filter by date on the frontend
+    // Also read video_events for watch time and orders (if they exist)
     const { data: events } = await supabase
       .from("video_events")
       .select("*")
       .eq("shop_id", shop)
       .order("created_at", { ascending: true });
 
-    const total       = videos?.length || 0;
-    const live        = videos?.filter(v => v.status === "live").length || 0;
-    const totalViews  = videos?.reduce((sum, v) => sum + (v.views || 0), 0) || 0;
-    const withProducts = videos?.filter(v => v.product_ids?.length > 0).length || 0;
+    const total        = videos?.length || 0;
+    const live         = videos?.filter(v => v.status === "live").length || 0;
+    const totalViews   = videos?.reduce((sum, v) => sum + (v.views || 0), 0) || 0;
+    const totalClicks  = videos?.reduce((sum, v) => sum + (v.buy_now_clicks || 0), 0) || 0;
 
     return {
-      total, live, totalViews, withProducts,
-      events: events || [],   // send ALL raw events to frontend
+      total, live, totalViews, totalClicks,
+      videos: videos || [],
+      events: events || [],
     };
   } catch (e) {
     console.error("Dashboard loader error:", e);
-    return { total: 0, live: 0, totalViews: 0, withProducts: 0, events: [] };
+    return { total: 0, live: 0, totalViews: 0, totalClicks: 0, videos: [], events: [] };
   }
 };
 
@@ -65,13 +67,24 @@ export default function Index() {
       return { fromDate: customFrom, toDate: customTo };
     }
     const days = RANGES[activeRange].days;
-    if (!days) return { fromDate: null, toDate: null }; // All time
+    if (!days) return { fromDate: null, toDate: null };
     const from = new Date();
     from.setDate(from.getDate() - days);
     return { fromDate: from.toISOString().slice(0, 10), toDate: todayStr };
   }, [activeRange, customFrom, customTo, todayStr]);
 
-  // ── Filter events by date window ─────────────────────────────
+  // ── Filter videos by date window (for date-range scoped stats) ──
+  const filteredVideos = useMemo(() => {
+    return (data.videos || []).filter(v => {
+      if (!v.created_at) return true; // include if no date
+      const day = v.created_at.slice(0, 10);
+      if (fromDate && day < fromDate) return false;
+      if (toDate   && day > toDate)   return false;
+      return true;
+    });
+  }, [data.videos, fromDate, toDate]);
+
+  // ── Filter events by date window (for watch time & orders) ──
   const filteredEvents = useMemo(() => {
     return (data.events || []).filter(e => {
       if (!e.created_at) return false;
@@ -82,37 +95,38 @@ export default function Index() {
     });
   }, [data.events, fromDate, toDate]);
 
-  // ── Compute metrics from filtered events ─────────────────────
+  // ── Compute all metrics ──────────────────────────────────────
   const metrics = useMemo(() => {
-    const clicks     = filteredEvents.filter(e => e.event_type === "click").length;
-    const orders     = filteredEvents.filter(e => e.event_type === "order").length;
+    // Views and clicks come from videos table (where they're actually stored)
+    const displayViews  = data.totalViews;   // total across all time from videos table
+    const totalClicks   = data.totalClicks;  // total across all time from videos table
+
+    // Watch time and orders come from video_events (if populated)
     const watchSec   = filteredEvents.filter(e => e.event_type === "watch")
                          .reduce((s, e) => s + (e.value || 0), 0);
+    const orders     = filteredEvents.filter(e => e.event_type === "order").length;
     const revenue    = filteredEvents.filter(e => e.event_type === "order")
                          .reduce((s, e) => s + (e.value || 0), 0);
-    const views      = filteredEvents.filter(e => e.event_type === "view").length;
 
-    // Fall back to videos.views total if no view events recorded yet
-    const displayViews   = views > 0 ? views : data.totalViews;
     const watchHours     = (watchSec / 3600).toFixed(1);
     const avgOrderValue  = orders > 0 ? revenue / orders : 0;
     const conversionRate = displayViews > 0 ? ((orders / displayViews) * 100).toFixed(2) : "0.00";
 
-    return { clicks, orders, watchSec, watchHours, revenue, displayViews, avgOrderValue, conversionRate };
-  }, [filteredEvents, data.totalViews]);
+    return { displayViews, totalClicks, watchSec, watchHours, orders, revenue, avgOrderValue, conversionRate };
+  }, [data.totalViews, data.totalClicks, filteredEvents]);
 
   // ── Stats cards ──────────────────────────────────────────────
   const stats = [
-    { label: "Total Videos",   value: fmtNum(data.total),           sub: `${data.live} live` },
-    { label: "Total Views",    value: fmtNum(metrics.displayViews),  sub: "Cumulative" },
-    { label: "Buy Now Clicks", value: fmtNum(metrics.clicks),        sub: "Shop Now tag" },
-    { label: "Total Orders",   value: fmtNum(metrics.orders),        sub: "From videos" },
-    { label: "Watch Time",     value: metrics.watchHours + " hrs",   sub: "Total watched" },
+    { label: "Total Videos",   value: fmtNum(data.total),              sub: `${data.live} live` },
+    { label: "Total Views",    value: fmtNum(metrics.displayViews),    sub: "Cumulative" },
+    { label: "Buy Now Clicks", value: fmtNum(metrics.totalClicks),     sub: "Shop Now tag" },
+    { label: "Total Orders",   value: fmtNum(metrics.orders),          sub: "From videos" },
+    { label: "Watch Time",     value: metrics.watchHours + " hrs",     sub: "Total watched" },
   ];
 
   const engagement = [
-    { label: "Total Engagement",       value: fmtNum((metrics.displayViews || 0) + (metrics.clicks || 0)) },
-    { label: "Product Clicks",         value: fmtNum(metrics.clicks) },
+    { label: "Total Engagement",       value: fmtNum((metrics.displayViews || 0) + (metrics.totalClicks || 0)) },
+    { label: "Product Clicks",         value: fmtNum(metrics.totalClicks) },
     { label: "Impression Sales",       value: fmtINR(metrics.revenue) },
     { label: "Avg Order Value",        value: fmtINR(metrics.avgOrderValue) },
     { label: "Video Watched Sessions", value: fmtNum(metrics.displayViews) },
@@ -121,25 +135,25 @@ export default function Index() {
 
   // ── Styles ───────────────────────────────────────────────────
   const s = {
-    page: { padding: "28px 32px", fontFamily: "'Inter', system-ui, sans-serif", minHeight: "100vh" },
-    header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "28px" },
-    title: { margin: 0, fontSize: "20px", fontWeight: "500", color: "#000" },
+    page:      { padding: "28px 32px", fontFamily: "'Inter', system-ui, sans-serif", minHeight: "100vh" },
+    header:    { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "28px" },
+    title:     { margin: 0, fontSize: "20px", fontWeight: "500", color: "#000" },
     manageBtn: { padding: "10px 22px", background: "#485861", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "14px", fontWeight: "500" },
     rangeWrap: { display: "flex", alignItems: "center", gap: "6px", marginBottom: "24px", flexWrap: "wrap", padding: "12px 16px", background: "#fafaf8", borderRadius: "10px", border: "1px solid #f0f0ee" },
-    rangeLabel: { fontSize: "13px", fontWeight: "600", color: "#64748b", marginRight: "4px" },
-    rangeBtn: (active) => ({ padding: "6px 12px", borderRadius: "20px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "500", background: active ? "#485861" : "#fff", color: active ? "#fff" : "#6b6b66", transition: "all 0.15s" }),
+    rangeLabel:{ fontSize: "13px", fontWeight: "600", color: "#64748b", marginRight: "4px" },
+    rangeBtn:  (active) => ({ padding: "6px 12px", borderRadius: "20px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "500", background: active ? "#485861" : "#fff", color: active ? "#fff" : "#6b6b66", transition: "all 0.15s" }),
     dateInput: { padding: "7px 12px", border: "1.5px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", color: "#0f172a", background: "#fff", cursor: "pointer" },
-    dateSep: { color: "#94a3b8", fontSize: "14px" },
-    statsRow: { display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px", marginBottom: "28px" },
-    statCard: { background: "#fff", borderRadius: "10px", padding: "20px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.07)", border: "1px solid #f1f5f9", borderTop: "3px solid #485861" },
+    dateSep:   { color: "#94a3b8", fontSize: "14px" },
+    statsRow:  { display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px", marginBottom: "28px" },
+    statCard:  { background: "#fff", borderRadius: "10px", padding: "20px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.07)", border: "1px solid #f1f5f9", borderTop: "3px solid #485861" },
     statLabel: { fontSize: "12px", fontWeight: "500", color: "#9a9a93", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" },
     statValue: { fontSize: "28px", fontWeight: "300", color: "#0a0a0a", lineHeight: 1 },
     statSub:   { fontSize: "11px", color: "#9a9a93", marginTop: "6px" },
-    engTitle: { fontSize: "17px", fontWeight: "700", color: "#0f172a", marginBottom: "16px" },
-    engGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" },
-    engCard: { background: "#fff", borderRadius: "14px", padding: "20px 22px", border: "1px solid #f1f5f9", borderTop: "3px solid #485861" },
-    engLabel: { fontSize: "12px", fontWeight: "600", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" },
-    engValue: { fontSize: "16px", fontWeight: "500", color: "#0f172a" },
+    engTitle:  { fontSize: "17px", fontWeight: "700", color: "#0f172a", marginBottom: "16px" },
+    engGrid:   { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" },
+    engCard:   { background: "#fff", borderRadius: "14px", padding: "20px 22px", border: "1px solid #f1f5f9", borderTop: "3px solid #485861" },
+    engLabel:  { fontSize: "12px", fontWeight: "600", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" },
+    engValue:  { fontSize: "16px", fontWeight: "500", color: "#0f172a" },
   };
 
   return (
