@@ -72,7 +72,7 @@
 
 <script>
 (function() {
-  var shop     = "{{ shop.myshopify_domain }}";
+  var shop     = "{{ shop.permanent_domain }}";
   var API      = "https://queuniverse-shoppable.vercel.app/api/videos";
   var blockId  = "{{ block.id }}";
   var tileType = "{{ block.settings.tile_type }}";
@@ -89,13 +89,13 @@
   productId = "{{ product.id }}";
   {% endif %}
 
-  /* ── CACHE: v7 — clears ALL old nq cache versions on every load ── */
+  /* ── CACHE: v5 — clears all old broken cache on every page load ── */
   (function() {
     try {
       var keysToRemove = [];
       for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
-        if (k && k.indexOf("nq_") === 0 && k.indexOf("nq_v7_") !== 0) {
+        if (k && k.indexOf("nq_") === 0 && k.indexOf("nq_v5_") !== 0) {
           keysToRemove.push(k);
         }
       }
@@ -103,7 +103,7 @@
     } catch(e) {}
   })();
 
-  var CACHE_KEY = "nq_v7_" + shop + (productId ? "_pdp_" + productId : "_home");
+  var CACHE_KEY = "nq_v5_" + shop + (productId ? "_pdp_" + productId : "_home");
   var rendered  = false;
 
   function readCache() {
@@ -111,8 +111,8 @@
       var raw = localStorage.getItem(CACHE_KEY);
       if (!raw) return null;
       var obj = JSON.parse(raw);
-      // 5 minute TTL — long enough to survive fast back navigation, short enough to stay fresh
-      if (Date.now() - obj.ts > 300000) { localStorage.removeItem(CACHE_KEY); return null; }
+      // 5 minute TTL (300000ms) — keeps view counts fresh
+      if (Date.now() - obj.ts > 60000) { localStorage.removeItem(CACHE_KEY); return null; } // 60s TTL
       return obj.data;
     } catch(e) { return null; }
   }
@@ -127,20 +127,18 @@
     try { localStorage.removeItem(CACHE_KEY); } catch(e) {}
   }
 
-  function resetContainer() {
-    var cont = document.getElementById("nq-carousel-" + blockId);
-    if (cont) cont.innerHTML = '<div class="nq-loading">Loading videos...</div>';
-    rendered = false;
-  }
-
   function renderVideos(data) {
     var raw = (data && data.videos) ? data.videos : [];
 
-    // Homepage: show ALL videos — no filtering by show_on
-    // PDP: filter to videos tagged with this product only
+    // Client-side filter: homepage shows only show_on=home, PDP shows only matching product
     if (!productId) {
-      allVideos = raw;
-      console.log("[NQ] homepage — showing all", allVideos.length, "videos");
+      // Homepage — filter to videos marked for homepage
+      allVideos = raw.filter(function(v) {
+        var showOn = Array.isArray(v.show_on) ? v.show_on : [];
+        return showOn.includes("home") || showOn.indexOf("home") >= 0;
+      });
+      // If none marked for homepage, show all live videos as fallback
+      if (allVideos.length === 0 && raw.length > 0) allVideos = raw;
     } else {
       // PDP — filter to videos tagged with this product
       var gid = "gid://shopify/Product/" + productId;
@@ -150,14 +148,10 @@
       });
     }
 
-    console.log("[NQ " + blockId + "] Rendering", allVideos.length, "of", raw.length, "videos | tileType:", tileType, "| productId:", productId);
+    console.log("[NQ " + blockId + "] Rendering", allVideos.length, "of", raw.length, "videos");
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (!cont) { console.log("[NQ] Container not found!"); return; }
-
-    // Reset rendered flag BEFORE clearing — prevents race conditions
-    rendered = false;
     cont.innerHTML = "";
-
     if (!allVideos.length) {
       if (productId) {
         var section = cont.closest(".nq-section");
@@ -167,16 +161,14 @@
       }
       return;
     }
-
+    rendered = true;
     allVideos.slice(0, 3).forEach(function(v, i) { cont.appendChild(buildCard(v, i)); });
     if (allVideos.length > 3) {
       requestAnimationFrame(function() {
         allVideos.slice(3).forEach(function(v, i) { cont.appendChild(buildCard(v, i + 3)); });
-        rendered = true;
         finishSetup(cont);
       });
     } else {
-      rendered = true;
       finishSetup(cont);
     }
   }
@@ -187,26 +179,23 @@
     else                                   initScrollBtns();
   }
 
-  // Step 1: instant render from cache if available
+  // Step 1: instant render from cache
   var cached = readCache();
   if (cached) {
-    console.log("[NQ " + blockId + "] Cache HIT — rendering instantly");
+    console.log("[NQ " + blockId + "] Cache HIT");
     renderVideos(cached);
   } else {
-    console.log("[NQ " + blockId + "] Cache MISS — showing skeletons, fetching API");
+    console.log("[NQ " + blockId + "] Cache MISS — fetching API");
   }
 
-  // Step 2: always fetch fresh data from API
+  // Step 2: fetch fresh data
   var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
-  console.log("[NQ] API URL:", apiURL);
-
   var giveUp = setTimeout(function() {
     if (!rendered) {
-      console.warn("[NQ] Timeout — API took too long");
       var cont = document.getElementById("nq-carousel-" + blockId);
       if (cont) cont.innerHTML = "<p class='nq-empty' style='padding:20px'>Slow connection — <a href='javascript:location.reload()' style='color:#333;text-decoration:underline'>tap to refresh</a></p>";
     }
-  }, 10000);
+  }, 15000);
 
   function doFetch(tries) {
     console.log("[NQ " + blockId + "] Fetching:", apiURL);
@@ -234,7 +223,7 @@
       .catch(function(err) {
         console.log("[NQ] Fetch error:", String(err), "tries left:", tries - 1);
         if (tries > 1) {
-          setTimeout(function() { doFetch(tries - 1); }, 1000);
+          setTimeout(function() { doFetch(tries - 1); }, 3000);
         } else {
           clearTimeout(giveUp);
           if (!rendered) {
@@ -250,40 +239,8 @@
   /* ── Re-render on back/forward navigation (bfcache restore) ── */
   window.addEventListener("pageshow", function(e) {
     if (e.persisted) {
-      console.log("[NQ] bfcache restore detected");
-      var cont = document.getElementById("nq-carousel-" + blockId);
-      var hasRealCards = cont && cont.querySelectorAll(".nq-card").length > 0;
-
-      if (hasRealCards) {
-        // Cards already visible in bfcache snapshot — just refresh in background silently
-        console.log("[NQ] Cards already present — background refresh only");
-        fetch(apiURL)
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            writeCache(data);
-            allVideos = data.videos || [];
-            refreshAllViewCounters();
-          }).catch(function(){});
-        return;
-      }
-
-      // No cards visible — try cache first for instant render, then fetch
-      var cached = readCache();
-      if (cached) {
-        console.log("[NQ] bfcache restore — rendering from cache instantly");
-        rendered = false;
-        renderVideos(cached);
-        // Background refresh to update view counts
-        fetch(apiURL)
-          .then(function(r) { return r.json(); })
-          .then(function(data) { writeCache(data); allVideos = data.videos || []; refreshAllViewCounters(); })
-          .catch(function(){});
-      } else {
-        // No cache — show loading and fetch
-        console.log("[NQ] bfcache restore — no cache, fetching");
-        resetContainer();
-        doFetch(3);
-      }
+      // bfcache restore — force a clean reload so carousel re-initializes
+      window.location.reload();
     }
   });
 
@@ -291,30 +248,9 @@
   document.addEventListener("visibilitychange", function() {
     if (document.visibilityState === "visible") {
       var cont = document.getElementById("nq-carousel-" + blockId);
-      var hasRealCards = cont && cont.querySelectorAll(".nq-card").length > 0;
-
-      if (hasRealCards) {
-        // Cards visible — background refresh only, don't disrupt the user
-        fetch(apiURL)
-          .then(function(r) { return r.json(); })
-          .then(function(data) { writeCache(data); allVideos = data.videos || []; refreshAllViewCounters(); })
-          .catch(function(){});
-        return;
-      }
-
-      // No cards — try cache for instant render first
-      console.log("[NQ] visibilitychange — no real cards found");
-      var cached = readCache();
-      if (cached) {
-        console.log("[NQ] visibilitychange — rendering from cache");
+      if (cont && cont.querySelectorAll(".nq-card").length === 0) {
         rendered = false;
-        renderVideos(cached);
-        fetch(apiURL)
-          .then(function(r) { return r.json(); })
-          .then(function(data) { writeCache(data); allVideos = data.videos || []; refreshAllViewCounters(); })
-          .catch(function(){});
-      } else {
-        resetContainer();
+        bustCache();
         doFetch(3);
       }
     }
@@ -870,19 +806,23 @@
   window._nqWarmInit = true;
 
   var API  = "https://queuniverse-shoppable.vercel.app/api/videos";
-  var shop = "{{ shop.myshopify_domain }}";
+  var shop = "{{ shop.permanent_domain }}";
   // Keep-warm pings homepage context — uses correct cache key matching the carousel
   var url  = API + "?shop=" + shop;
-  var CACHE_KEY = "nq_v7_" + shop + "_home";
+  var CACHE_KEY = "nq_v5_" + shop + "_home";
 
   function ping() {
     fetch(url, { keepalive: true })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        // Keep-warm: always update cache with fresh data so next page load is instant
+        // Keep-warm: only update cache if carousel hasn't loaded yet
+        // This prevents overwriting fresher data the carousel already has
         if (data && data.videos && data.videos.length > 0) {
           try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+            var existing = localStorage.getItem(CACHE_KEY);
+            if (!existing) {
+              localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+            }
           } catch(e) {}
         }
       })

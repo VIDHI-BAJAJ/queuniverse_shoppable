@@ -15,10 +15,11 @@
 
 <script>
 (function() {
-  var shop      = "{{ shop.myshopify_domain }}";
+  var shop      = "{{ shop.permanent_domain }}";
   var productId = "{{ product.id }}";
   var blockId   = "{{ block.id }}";
   var API       = "https://queuniverse-shoppable.vercel.app/api/videos";
+  // Pass product_id so API returns ONLY videos tagged to THIS product
   var apiURL    = API + "?shop=" + shop + "&product_id=gid://shopify/Product/" + productId;
   var isMuted   = true;
   var manuallyClosed = false;
@@ -36,43 +37,51 @@
 
   function showFloat() {
     if (manuallyClosed) return;
-    if (!videoEl.src) return;
+    if (!videoEl.src) return; // no video loaded yet
     wrap.style.display = "block";
     setTimeout(function() { wrap.classList.add("nq-float-visible"); }, 100);
     videoEl.play().catch(function(){});
   }
 
+  // Fetch videos tagged to THIS specific product
   fetch(apiURL)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var allVideos = data.videos || [];
 
+      // Client-side filter: only videos that have this product's GID in product_ids
       var gid = "gid://shopify/Product/" + productId;
       var videos = allVideos.filter(function(v) {
         var ids = Array.isArray(v.product_ids) ? v.product_ids : [];
         return ids.indexOf(gid) >= 0 || ids.indexOf(productId) >= 0;
       });
 
-      if (!videos.length) return;
+      if (!videos.length) return; // no video for this product — stay hidden
 
+      // Load the first matching video
       var video = videos[0];
       videoEl.src = video.r2_url;
       if (video.thumbnail_url) videoEl.poster = video.thumbnail_url;
       videoEl.muted = true;
       videoEl.play().catch(function(){});
 
+      // Track view
       try {
         fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + video.id + "&shop=" + shop + "&event=view", {
           keepalive: true
         }).catch(function(){});
       } catch(e) {}
 
+      // Show widget
       wrap.style.display = "block";
       setTimeout(function() { wrap.classList.add("nq-float-visible"); }, 100);
+
+      // Watch cart button visibility
       setTimeout(watchCartButtons, 800);
     })
     .catch(function() {});
 
+  // Close button
   if (closeBtn) {
     closeBtn.onclick = function() {
       manuallyClosed = true;
@@ -80,6 +89,7 @@
     };
   }
 
+  // Mute toggle
   if (muteBtn) {
     muteBtn.onclick = function() {
       isMuted = !isMuted;
@@ -103,6 +113,7 @@
     }
 
     if (!cartBtn) {
+      // Fallback: find by text content
       var buttons = document.querySelectorAll("button, input[type=submit]");
       for (var j = 0; j < buttons.length; j++) {
         var txt = (buttons[j].textContent || buttons[j].value || "").toLowerCase();
