@@ -239,8 +239,14 @@
   /* ── Re-render on back/forward navigation (bfcache restore) ── */
   window.addEventListener("pageshow", function(e) {
     if (e.persisted) {
-      // bfcache restore — force a clean reload so carousel re-initializes
-      window.location.reload();
+      // bfcache restore — re-render carousel without full page reload
+      var cont = document.getElementById("nq-carousel-" + blockId);
+      if (cont) {
+        rendered = false;
+        cont.innerHTML = "";
+        bustCache();
+        doFetch(3);
+      }
     }
   });
 
