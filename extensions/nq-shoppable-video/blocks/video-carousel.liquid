@@ -671,9 +671,32 @@
     }
   }
 
-  var _watchInterval = null;
-  function startWatchTracking(video) { stopWatchTracking(); _watchInterval = setInterval(function() { trackEvent("watch", video, 5); }, 5000); }
-  function stopWatchTracking()       { if (_watchInterval) { clearInterval(_watchInterval); _watchInterval = null; } }
+  var _watchInterval  = null;
+  var _watchStartTime = null;
+  var _watchVideo     = null;
+
+  function startWatchTracking(video) {
+    stopWatchTracking();
+    _watchVideo     = video;
+    _watchStartTime = Date.now();
+    /* Fire every 5 s so the dashboard accumulates watch time */
+    _watchInterval  = setInterval(function() { trackEvent("watch", video, 5); }, 5000);
+  }
+
+  function stopWatchTracking() {
+    if (_watchInterval) {
+      clearInterval(_watchInterval);
+      _watchInterval = null;
+      /* Flush any partial seconds since the last 5-s tick */
+      if (_watchVideo && _watchStartTime) {
+        var elapsed = Math.floor((Date.now() - _watchStartTime) / 1000);
+        var partial  = elapsed % 5;
+        if (partial > 0) { trackEvent("watch", _watchVideo, partial); }
+      }
+    }
+    _watchVideo     = null;
+    _watchStartTime = null;
+  }
 
   window.nqTrackClick = function(el) {
     try {
@@ -743,12 +766,14 @@
           e.preventDefault();
           var handle = btn.getAttribute("data-handle");
           try {
-            new Image().src = TRACK + "?video_id=" + videoId + "&shop=" + shop + "&event=click";
+            /* Use fetch+keepalive so the request survives the page navigation */
+            fetch(TRACK + "?video_id=" + videoId + "&shop=" + shop + "&event=click", {
+              method: "GET", keepalive: true
+            }).catch(function(){});
             sessionStorage.setItem("nq_last_video", JSON.stringify({ id: videoId, shop: shop, ts: Date.now() }));
           } catch(err) {}
-          setTimeout(function() {
-            window.location.href = "/products/" + handle;
-          }, 300);
+          /* Navigate immediately - keepalive fetch persists after page unload */
+          window.location.href = "/products/" + handle;
         });
       }
     }, 0);

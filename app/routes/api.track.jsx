@@ -1,7 +1,7 @@
 const HEADERS = {
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "*",
 };
 
@@ -23,21 +23,25 @@ export const loader = async ({ request }) => {
       return new Response(JSON.stringify({ ok: false, error: "Missing params" }), { headers: HEADERS });
     }
 
-    // 1. Increment views on videos table for "view" events
-    if (event === "view") {
+    // 1. Increment counters on videos table
+    if (event === "view" || event === "click") {
+      const col = event === "view" ? "views" : "buy_now_clicks";
       const { data } = await supabase
         .from("videos")
-        .select("views")
+        .select(col)
         .eq("id", videoId)
         .eq("shop_id", shop)
         .single();
 
       if (data) {
-        await supabase
-          .from("videos")
-          .update({ views: (data.views || 0) + 1 })
-          .eq("id", videoId)
-          .eq("shop_id", shop);
+        // Only update click counter if the column exists in the DB
+        if (event === "view" || data[col] !== undefined) {
+          await supabase
+            .from("videos")
+            .update({ [col]: (data[col] || 0) + 1 })
+            .eq("id", videoId)
+            .eq("shop_id", shop);
+        }
       }
     }
 
