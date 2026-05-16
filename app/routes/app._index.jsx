@@ -105,7 +105,7 @@ export default function Index() {
   const stats = [
     { label: "Total Videos",   value: fmtNum(data.total),           sub: `${data.live} live` },
     { label: "Total Views",    value: fmtNum(metrics.displayViews),  sub: "Cumulative" },
-    { label: "Buy Now Clicks", value: fmtNum(metrics.clicks),        sub: "Shop Now taps" },
+    { label: "Buy Now Clicks", value: fmtNum(metrics.clicks),        sub: "Shop Now tag" },
     { label: "Total Orders",   value: fmtNum(metrics.orders),        sub: "From videos" },
     { label: "Watch Time",     value: metrics.watchHours + " hrs",   sub: "Total watched" },
   ];

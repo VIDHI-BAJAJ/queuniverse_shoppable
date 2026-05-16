@@ -736,9 +736,10 @@
       '<a href="#" class="nq-popup-shop-btn" style="background:' + btnColor + '" id="nq-shop-btn-' + blockId + '" data-handle="' + p.handle + '">SHOP NOW</a>';
 
     setTimeout(function() {
-      var btn = document.getElementById("nq-shop-btn-" + blockId);
-      if (btn) {
-        btn.addEventListener("click", function(e) {
+  var btn = pd.querySelector("#nq-shop-btn-" + blockId);
+  if (!btn) btn = pd.querySelector(".nq-popup-shop-btn");
+  if (btn) {
+    btn.addEventListener("click", function(e) {
           e.preventDefault();
           var handle = btn.getAttribute("data-handle");
           try {
@@ -752,6 +753,7 @@
       }
     }, 0);
   }
+
 
   init();
 
