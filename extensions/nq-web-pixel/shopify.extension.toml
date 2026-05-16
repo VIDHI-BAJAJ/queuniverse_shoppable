@@ -5,5 +5,6 @@ uid = "450a0307-4441-a337-6a62-608d74894622aad231c9"
 
 [runtime_configuration_definition]
 type = "object"
-properties = {}
 additionalProperties = false
+
+[runtime_configuration_definition.properties]
