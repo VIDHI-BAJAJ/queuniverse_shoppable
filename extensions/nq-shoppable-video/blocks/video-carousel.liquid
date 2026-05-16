@@ -72,7 +72,7 @@
 
 <script>
 (function() {
-  var shop     = "{{ shop.permanent_domain }}";
+  var shop     = "{{ shop.myshopify_domain }}";
   var API      = "https://queuniverse-shoppable.vercel.app/api/videos";
   var blockId  = "{{ block.id }}";
   var tileType = "{{ block.settings.tile_type }}";
@@ -870,7 +870,7 @@
   window._nqWarmInit = true;
 
   var API  = "https://queuniverse-shoppable.vercel.app/api/videos";
-  var shop = "{{ shop.permanent_domain }}";
+  var shop = "{{ shop.myshopify_domain }}";
   // Keep-warm pings homepage context — uses correct cache key matching the carousel
   var url  = API + "?shop=" + shop;
   var CACHE_KEY = "nq_v6_" + shop + "_home";
