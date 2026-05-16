@@ -728,12 +728,9 @@
           '<p class="nq-popup-product-title">' + p.title + '</p>' +
           '<p class="nq-popup-product-price">' + priceHtml + ' ' + cmpHtml + '</p>' +
         '</div></div>' +
-      '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '" data-video-id="' + vid + '" data-shop="' + shop + '" onclick="nqTrackClick(this)">SHOP NOW</a>';
+      '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '" data-video-id="' + vid + '" data-shop="' + shop + '" onclick="try{var _v=this.getAttribute(\'data-video-id\'),_s=this.getAttribute(\'data-shop\');new Image().src=\'https://queuniverse-shoppable.vercel.app/api/track?video_id=\'+_v+\'&shop=\'+_s+\'&event=click\';sessionStorage.setItem(\'nq_last_video\',JSON.stringify({id:_v,shop:_s,ts:Date.now()}));}catch(e){}">SHOP NOW</a>';
   }
 
-  /* ════════════════════════════════════════════════════════════
-     KICK OFF
-  ════════════════════════════════════════════════════════════ */
   init();
 
 })();
