@@ -239,11 +239,12 @@
   /* ── Re-render on back/forward navigation (bfcache restore) ── */
   window.addEventListener("pageshow", function(e) {
     if (e.persisted) {
-      // Page restored from bfcache — re-render if container is empty
+      // Page restored from bfcache — always re-render
       var cont = document.getElementById("nq-carousel-" + blockId);
-      if (cont && cont.querySelectorAll(".nq-card").length === 0) {
+      if (cont) {
         rendered = false;
-        bustCache(); // force fresh fetch
+        cont.innerHTML = ""; // clear skeleton/stale cards
+        bustCache();
         doFetch(3);
       }
     }

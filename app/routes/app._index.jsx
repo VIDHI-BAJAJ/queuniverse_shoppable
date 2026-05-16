@@ -80,6 +80,7 @@ export const loader = async ({ request }) => {
   }
 };
  
+ 
 const RANGES = [
   { label: "Last 7 days",  days: 7 },
   { label: "Last 30 days", days: 30 },
@@ -87,11 +88,6 @@ const RANGES = [
   { label: "All time",     days: null },
 ];
  
-const METRICS = [
-  { key: "views",  label: "Watch Time (Views)", color: "#64748b" },
-  { key: "clicks", label: "Video Clicks",        color: "#64748b" },
-  { key: "orders", label: "Orders",              color: "#64748b" },
-];
  
 function fmtINR(v) {
   return "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
@@ -104,29 +100,15 @@ export default function Index() {
   const data = useLoaderData();
   const navigate = useNavigate();
  
-  const [activeRange, setActiveRange] = useState(1); // default Last 30 days
+  const [activeRange, setActiveRange] = useState(1);
   const [customFrom, setCustomFrom] = useState("");
-  const [customTo,   setCustomTo]   = useState("");
-  const [activeMetric, setActiveMetric] = useState("views");
+  const [customTo, setCustomTo] = useState("");
  
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
  
+ 
   // Filter chartData by selected range
-  const filteredChart = useMemo(() => {
-    let from, to;
-    if (customFrom && customTo) {
-      from = customFrom; to = customTo;
-    } else {
-      const days = RANGES[activeRange].days;
-      if (!days) return data.chartData;
-      const d = new Date(today);
-      d.setDate(d.getDate() - days + 1);
-      from = d.toISOString().slice(0, 10);
-      to   = todayStr;
-    }
-    return data.chartData.filter(r => r.date >= from && r.date <= to);
-  }, [activeRange, customFrom, customTo, data.chartData]);
  
   const stats = [
     { label: "Total Videos",        value: fmtNum(data.total),         sub: `${data.live} live` },
@@ -144,7 +126,6 @@ export default function Index() {
     { label: "Video Watched Sessions", value: fmtNum(data.totalViews) },
     { label: "Video Conversion Rate",  value: data.conversionRate + "%" },
   ];
-
   const s = {
     page: {
       padding: "28px 32px",

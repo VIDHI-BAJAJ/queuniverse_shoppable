@@ -7,10 +7,7 @@
     <video
       class="nq-float-video"
       id="nq-float-video-{{ block.id }}"
-      autoplay
-      muted
-      loop
-      playsinline
+      autoplay muted loop playsinline
     ></video>
     <button class="nq-float-mute" id="nq-float-mute-{{ block.id }}">&#128263;</button>
   </div>
@@ -22,46 +19,73 @@
   var productId = "{{ product.id }}";
   var blockId   = "{{ block.id }}";
   var API       = "https://queuniverse-shoppable.vercel.app/api/videos";
+  // Pass product_id so API returns ONLY videos tagged to THIS product
   var apiURL    = API + "?shop=" + shop + "&product_id=gid://shopify/Product/" + productId;
   var isMuted   = true;
+  var manuallyClosed = false;
 
-  var wrap    = document.getElementById("nq-float-" + blockId);
-  var videoEl = document.getElementById("nq-float-video-" + blockId);
+  var wrap     = document.getElementById("nq-float-" + blockId);
+  var videoEl  = document.getElementById("nq-float-video-" + blockId);
   var closeBtn = document.getElementById("nq-float-close-" + blockId);
-  var muteBtn = document.getElementById("nq-float-mute-" + blockId);
+  var muteBtn  = document.getElementById("nq-float-mute-" + blockId);
 
-  // Fetch video for this product
+  function hideFloat() {
+    wrap.classList.remove("nq-float-visible");
+    setTimeout(function() { wrap.style.display = "none"; }, 300);
+    videoEl.pause();
+  }
+
+  function showFloat() {
+    if (manuallyClosed) return;
+    if (!videoEl.src) return; // no video loaded yet
+    wrap.style.display = "block";
+    setTimeout(function() { wrap.classList.add("nq-float-visible"); }, 100);
+    videoEl.play().catch(function(){});
+  }
+
+  // Fetch videos tagged to THIS specific product
   fetch(apiURL)
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      var videos = data.videos || [];
-      if (!videos.length) return; 
+      var allVideos = data.videos || [];
 
-      // Load first video
-      videoEl.src = videos[0].r2_url;
+      // Client-side filter: only videos that have this product's GID in product_ids
+      var gid = "gid://shopify/Product/" + productId;
+      var videos = allVideos.filter(function(v) {
+        var ids = Array.isArray(v.product_ids) ? v.product_ids : [];
+        return ids.indexOf(gid) >= 0 || ids.indexOf(productId) >= 0;
+      });
+
+      if (!videos.length) return; // no video for this product — stay hidden
+
+      // Load the first matching video
+      var video = videos[0];
+      videoEl.src = video.r2_url;
+      if (video.thumbnail_url) videoEl.poster = video.thumbnail_url;
       videoEl.muted = true;
       videoEl.play().catch(function(){});
 
-      // Track view via Vercel API (uses service role key securely)
+      // Track view
       try {
-        fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + videos[0].id + "&shop=" + shop, {
+        fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + video.id + "&shop=" + shop + "&event=view", {
           keepalive: true
         }).catch(function(){});
       } catch(e) {}
 
-      // Show the widget
+      // Show widget
       wrap.style.display = "block";
       setTimeout(function() { wrap.classList.add("nq-float-visible"); }, 100);
+
+      // Watch cart button visibility
+      setTimeout(watchCartButtons, 800);
     })
     .catch(function() {});
 
-  // Close button — sets manuallyClosed so it won't reappear
+  // Close button
   if (closeBtn) {
     closeBtn.onclick = function() {
       manuallyClosed = true;
-      wrap.classList.remove("nq-float-visible");
-      setTimeout(function() { wrap.style.display = "none"; }, 300);
-      videoEl.pause();
+      hideFloat();
     };
   }
 
@@ -74,37 +98,12 @@
     };
   }
 
-  // Hide floating video when Add to Cart button comes into view
-  function hideFloat() {
-    wrap.classList.remove("nq-float-visible");
-    setTimeout(function() { wrap.style.display = "none"; }, 300);
-    videoEl.pause();
-  }
-
-  var manuallyClosed = false;
-
-  function showFloat() {
-    if (manuallyClosed) return; // respect manual close
-    wrap.style.display = "block";
-    setTimeout(function() { wrap.classList.add("nq-float-visible"); }, 100);
-    videoEl.play().catch(function(){});
-  }
-
-  // Watch Add to Cart / Buy Now buttons using IntersectionObserver
-  // When button is VISIBLE on screen → hide float
-  // When button scrolls OUT of view → show float again
   function watchCartButtons() {
     var selectors = [
-      '[name="add"]',
-      '[id*="add-to-cart"]',
-      '[id*="AddToCart"]',
-      '.add-to-cart',
-      '[data-testid*="add-to-cart"]',
-      'button[type="submit"].product-form__cart-submit',
-      '.product-form__submit',
-      '#ProductSubmitButton',
-      '.btn--add-to-cart',
-      '[data-add-to-cart]'
+      '[name="add"]', '[id*="add-to-cart"]', '[id*="AddToCart"]',
+      '.add-to-cart', '.product-form__submit', '#ProductSubmitButton',
+      '.btn--add-to-cart', '[data-add-to-cart]',
+      'button[type="submit"].product-form__cart-submit'
     ];
 
     var cartBtn = null;
@@ -113,44 +112,31 @@
       if (cartBtn) break;
     }
 
-    // Fallback: find by text
     if (!cartBtn) {
+      // Fallback: find by text content
       var buttons = document.querySelectorAll("button, input[type=submit]");
       for (var j = 0; j < buttons.length; j++) {
         var txt = (buttons[j].textContent || buttons[j].value || "").toLowerCase();
         if (txt.includes("add to cart") || txt.includes("buy now") || txt.includes("sold out")) {
-          cartBtn = buttons[j];
-          break;
+          cartBtn = buttons[j]; break;
         }
       }
     }
 
-    if (!cartBtn) return; // no cart button found
+    if (!cartBtn) return;
 
-    // Simple rule:
-    // Cart button NOT YET reached (still below viewport) → show video
-    // Cart button visible OR scrolled past → hide video
-
-    function checkCartButtonPosition() {
+    function checkPosition() {
       var rect = cartBtn.getBoundingClientRect();
-      var viewH = window.innerHeight;
-
-      // Button is still below the screen = user hasn't scrolled to it yet
-      if (rect.top > viewH) {
-        // Button not yet reached — show floating video
+      if (rect.top > window.innerHeight) {
         showFloat();
       } else {
-        // Button is visible OR user scrolled past it — hide floating video
         hideFloat();
       }
     }
 
-    window.addEventListener("scroll", checkCartButtonPosition, { passive: true });
-    checkCartButtonPosition();
+    window.addEventListener("scroll", checkPosition, { passive: true });
+    checkPosition();
   }
-
-  // Start watching after video loads
-  setTimeout(watchCartButtons, 1000);
 
 })();
 </script>
