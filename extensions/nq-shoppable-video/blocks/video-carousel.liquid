@@ -716,19 +716,37 @@
   }
 
   function renderPopupProduct(pd, p, video) {
-    if (!p) return;
-    var priceHtml = '&#8377;' + fmt(p.price);
-    var cmpHtml   = (p.compare_at_price && p.compare_at_price > p.price)
-                    ? '<span class="nq-popup-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>' : '';
-    var vid = video ? video.id : '';
+    if (!p) { console.log("[NQ] fetchProduct returned null"); return; }
+    console.log("[NQ] Rendering product:", p.title, p.price, p.handle);
+
+    var priceHtml   = '&#8377;' + fmt(p.price);
+    var compareHtml = '';
+    if (p.compare_at_price && p.compare_at_price > p.price) {
+      compareHtml = '<span class="nq-popup-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
+    }
+    var videoId = video ? video.id : '';
+
     pd.innerHTML =
       '<div class="nq-popup-product-card">' +
         (p.image ? '<img src="' + p.image + '" class="nq-popup-thumb">' : '') +
         '<div class="nq-popup-product-info">' +
           '<p class="nq-popup-product-title">' + p.title + '</p>' +
-          '<p class="nq-popup-product-price">' + priceHtml + ' ' + cmpHtml + '</p>' +
-        '</div></div>' +
-      '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '" data-video-id="' + vid + '" data-shop="' + shop + '" onclick="try{var _v=this.getAttribute(\'data-video-id\'),_s=this.getAttribute(\'data-shop\');new Image().src=\'https://queuniverse-shoppable.vercel.app/api/track?video_id=\'+_v+\'&shop=\'+_s+\'&event=click\';sessionStorage.setItem(\'nq_last_video\',JSON.stringify({id:_v,shop:_s,ts:Date.now()}));}catch(e){}">SHOP NOW</a>';
+          '<p class="nq-popup-product-price">' + priceHtml + ' ' + compareHtml + '</p>' +
+        '</div>' +
+      '</div>' +
+      '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '" id="nq-shop-btn-' + blockId + '">SHOP NOW</a>';
+
+    setTimeout(function() {
+      var btn = document.getElementById("nq-shop-btn-" + blockId);
+      if (btn) {
+        btn.addEventListener("click", function() {
+          try {
+            new Image().src = TRACK + "?video_id=" + videoId + "&shop=" + shop + "&event=click";
+            sessionStorage.setItem("nq_last_video", JSON.stringify({ id: videoId, shop: shop, ts: Date.now() }));
+          } catch(e) {}
+        });
+      }
+    }, 0);
   }
 
   init();
