@@ -21,7 +21,7 @@ function fireOrder(shop, videoId, orderValue) {
   fetch(url, { method: "GET", keepalive: true }).catch(function () {});
 }
 
-
+/* ── 1. Standard Shopify checkout_completed event ── */
 analytics.subscribe("checkout_completed", function (event) {
   try {
     var shop       = event.context.document.location.host;
@@ -44,7 +44,9 @@ analytics.subscribe("checkout_completed", function (event) {
   } catch (e) {}
 });
 
-
+/* ── 2. page_viewed — keep sessionStorage alive across Gokwik redirects ──
+   Gokwik redirects to an external payment page and back, which can wipe
+   sessionStorage. We back it up to localStorage on every page view. */
 analytics.subscribe("page_viewed", function (event) {
   try {
     var stored = browser.sessionStorage.getItem("nq_last_video");
@@ -67,7 +69,7 @@ analytics.subscribe("page_viewed", function (event) {
   } catch (e) {}
 });
 
-
+/* ── 3. payment_info_submitted — Gokwik fires this before redirecting ── */
 analytics.subscribe("payment_info_submitted", function (event) {
   try {
     /* Backup again right before payment redirect */
