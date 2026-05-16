@@ -112,7 +112,7 @@
       if (!raw) return null;
       var obj = JSON.parse(raw);
       // 5 minute TTL (300000ms) — keeps view counts fresh
-      if (Date.now() - obj.ts > 60000) { localStorage.removeItem(CACHE_KEY); return null; } // 60s TTL
+      if (Date.now() - obj.ts > 86400000) { localStorage.removeItem(CACHE_KEY); return null; } // 24h TTL
       return obj.data;
     } catch(e) { return null; }
   }
@@ -188,14 +188,16 @@
     console.log("[NQ " + blockId + "] Cache MISS — fetching API");
   }
 
-  // Step 2: fetch fresh data
+  // Step 2: ALWAYS fetch fresh data (even if cache hit)
+  // This ensures videos always appear — cached first, then updated
   var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
   var giveUp = setTimeout(function() {
     if (!rendered) {
-      var cont = document.getElementById("nq-carousel-" + blockId);
-      if (cont) cont.innerHTML = "<p class='nq-empty' style='padding:20px'>Slow connection — <a href='javascript:location.reload()' style='color:#333;text-decoration:underline'>tap to refresh</a></p>";
+      // Still not rendered after 5s — bust cache and try once more
+      bustCache();
+      doFetch(1);
     }
-  }, 15000);
+  }, 5000);
 
   function doFetch(tries) {
     console.log("[NQ " + blockId + "] Fetching:", apiURL);
@@ -216,8 +218,12 @@
         if (!rendered) {
           renderVideos(data);
         } else {
-          allVideos = data.videos || [];
-          refreshAllViewCounters();
+          // Already rendered from cache — update with fresh data silently
+          var freshVideos = data.videos || [];
+          if (freshVideos.length > 0) {
+            allVideos = freshVideos;
+            refreshAllViewCounters();
+          }
         }
       })
       .catch(function(err) {
@@ -831,10 +837,8 @@
         // This prevents overwriting fresher data the carousel already has
         if (data && data.videos && data.videos.length > 0) {
           try {
-            var existing = localStorage.getItem(CACHE_KEY);
-            if (!existing) {
-              localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
-            }
+            // Always update cache with fresh data from keep-warm
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
           } catch(e) {}
         }
       })
