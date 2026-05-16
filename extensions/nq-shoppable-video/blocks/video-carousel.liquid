@@ -672,30 +672,36 @@
   }
 
   var _watchInterval  = null;
-  var _watchStartTime = null;
+  var _watchStartTime = null;   /* ms timestamp when current video session began  */
+  var _watchLastTick  = null;   /* ms timestamp of last 5-s tick sent             */
   var _watchVideo     = null;
 
   function startWatchTracking(video) {
+    /* stopWatchTracking() flushes partial time for the PREVIOUS video */
     stopWatchTracking();
     _watchVideo     = video;
     _watchStartTime = Date.now();
-    /* Fire every 5 s so the dashboard accumulates watch time */
-    _watchInterval  = setInterval(function() { trackEvent("watch", video, 5); }, 5000);
+    _watchLastTick  = Date.now();
+    /* Every 5 seconds, fire a "watch" event with value=5 (seconds) */
+    _watchInterval  = setInterval(function() {
+      _watchLastTick = Date.now();
+      trackEvent("watch", video, 5);
+    }, 5000);
   }
 
   function stopWatchTracking() {
     if (_watchInterval) {
       clearInterval(_watchInterval);
       _watchInterval = null;
-      /* Flush any partial seconds since the last 5-s tick */
-      if (_watchVideo && _watchStartTime) {
-        var elapsed = Math.floor((Date.now() - _watchStartTime) / 1000);
-        var partial  = elapsed % 5;
+      /* Flush the partial window since the last tick */
+      if (_watchVideo && _watchLastTick) {
+        var partial = Math.floor((Date.now() - _watchLastTick) / 1000);
         if (partial > 0) { trackEvent("watch", _watchVideo, partial); }
       }
     }
     _watchVideo     = null;
     _watchStartTime = null;
+    _watchLastTick  = null;
   }
 
   window.nqTrackClick = function(el) {
@@ -725,12 +731,16 @@
   })();
 
   function showPopup(bid) {
+    /* Always flush the previous video's watch time before starting the next */
+    stopWatchTracking();
+
     var video = allVideos[currentIndex];
     var vid   = document.getElementById("nq-popup-video-" + bid);
     vid.src   = video.r2_url;
     vid.play();
     trackView(video);
     startWatchTracking(video);
+
     var pd = document.getElementById("nq-popup-product-" + bid);
     pd.innerHTML = "";
     if ((video.product_ids && video.product_ids.length) || (video.product_handle && video.product_handle.length)) {
@@ -748,35 +758,45 @@
     }
     var videoId = video ? video.id : '';
 
-    pd.innerHTML =
-      '<div class="nq-popup-product-card">' +
-        (p.image ? '<img src="' + p.image + '" class="nq-popup-thumb">' : '') +
-        '<div class="nq-popup-product-info">' +
-          '<p class="nq-popup-product-title">' + p.title + '</p>' +
-          '<p class="nq-popup-product-price">' + priceHtml + ' ' + compareHtml + '</p>' +
-        '</div>' +
-      '</div>' +
-      '<a href="#" class="nq-popup-shop-btn" style="background:' + btnColor + '" id="nq-shop-btn-' + blockId + '" data-handle="' + p.handle + '">SHOP NOW</a>';
+    /* Build product card HTML */
+    var card = document.createElement("div");
+    card.className = "nq-popup-product-card";
+    if (p.image) {
+      var thumb = document.createElement("img");
+      thumb.src = p.image;
+      thumb.className = "nq-popup-thumb";
+      card.appendChild(thumb);
+    }
+    var info = document.createElement("div");
+    info.className = "nq-popup-product-info";
+    info.innerHTML = '<p class="nq-popup-product-title">' + p.title + '</p>' +
+                     '<p class="nq-popup-product-price">' + priceHtml + ' ' + compareHtml + '</p>';
+    card.appendChild(info);
+    pd.appendChild(card);
 
-    setTimeout(function() {
-  var btn = pd.querySelector("#nq-shop-btn-" + blockId);
-  if (!btn) btn = pd.querySelector(".nq-popup-shop-btn");
-  if (btn) {
-    btn.addEventListener("click", function(e) {
-          e.preventDefault();
-          var handle = btn.getAttribute("data-handle");
-          try {
-            /* Use fetch+keepalive so the request survives the page navigation */
-            fetch(TRACK + "?video_id=" + videoId + "&shop=" + shop + "&event=click", {
-              method: "GET", keepalive: true
-            }).catch(function(){});
-            sessionStorage.setItem("nq_last_video", JSON.stringify({ id: videoId, shop: shop, ts: Date.now() }));
-          } catch(err) {}
-          /* Navigate immediately - keepalive fetch persists after page unload */
-          window.location.href = "/products/" + handle;
-        });
-      }
-    }, 0);
+    /* Build SHOP NOW button and attach listener directly — no setTimeout race */
+    var shopBtn = document.createElement("a");
+    shopBtn.href      = "#";
+    shopBtn.className = "nq-popup-shop-btn";
+    shopBtn.style.background = btnColor;
+    shopBtn.textContent = "SHOP NOW";
+
+    shopBtn.addEventListener("click", function(e) {
+      e.preventDefault();
+      /* Flush remaining watch time BEFORE navigating away */
+      stopWatchTracking();
+      try {
+        /* keepalive=true keeps the request alive through page navigation */
+        fetch(TRACK + "?video_id=" + videoId + "&shop=" + shop + "&event=click", {
+          method: "GET", keepalive: true
+        }).catch(function(){});
+        sessionStorage.setItem("nq_last_video", JSON.stringify({ id: videoId, shop: shop, ts: Date.now() }));
+      } catch(err) {}
+      /* Navigate immediately after firing — keepalive ensures delivery */
+      window.location.href = "/products/" + p.handle;
+    });
+
+    pd.appendChild(shopBtn);
   }
 
 
