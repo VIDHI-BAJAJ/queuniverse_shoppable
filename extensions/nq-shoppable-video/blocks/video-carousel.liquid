@@ -195,8 +195,6 @@
   var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
   var giveUp = setTimeout(function() {
     if (!rendered) {
-      // Still not rendered after 5s — bust cache and try once more
-      bustCache();
       doFetch(1);
     }
   }, 5000);
@@ -709,7 +707,20 @@
         if (viewEl) viewEl.innerHTML = "&#128065; " + video.views;
       }
     }
-    bustCache();
+    // Update cache with new view count instead of busting it
+    // This keeps cache valid so back-navigation shows videos instantly
+    try {
+      var cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        var obj = JSON.parse(cached);
+        if (obj && obj.data && obj.data.videos) {
+          obj.data.videos = obj.data.videos.map(function(v) {
+            return v.id === video.id ? Object.assign({}, v, { views: video.views }) : v;
+          });
+          localStorage.setItem(CACHE_KEY, JSON.stringify(obj));
+        }
+      }
+    } catch(e) {}
   }
 
   // Track watch time — called every 5s while popup video plays
