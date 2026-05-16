@@ -3,6 +3,9 @@ type = "web_pixel_extension"
 
 runtime_context = "strict"
 
+[runtime_configuration]
+  type = "object"
+
 [settings]
   [[settings.fields]]
   name = "accountID"
