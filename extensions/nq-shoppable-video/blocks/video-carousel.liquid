@@ -89,13 +89,13 @@
   productId = "{{ product.id }}";
   {% endif %}
 
-  /* ── CACHE: v5 — clears all old broken cache on every page load ── */
+  /* ── CACHE: v7 — clears ALL old nq cache versions on every load ── */
   (function() {
     try {
       var keysToRemove = [];
       for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
-        if (k && k.indexOf("nq_") === 0 && k.indexOf("nq_v6_") !== 0) {
+        if (k && k.indexOf("nq_") === 0 && k.indexOf("nq_v7_") !== 0) {
           keysToRemove.push(k);
         }
       }
@@ -103,7 +103,7 @@
     } catch(e) {}
   })();
 
-  var CACHE_KEY = "nq_v6_" + shop + (productId ? "_pdp_" + productId : "_home");
+  var CACHE_KEY = "nq_v7_" + shop + (productId ? "_pdp_" + productId : "_home");
   var rendered  = false;
 
   function readCache() {
@@ -873,7 +873,7 @@
   var shop = "{{ shop.myshopify_domain }}";
   // Keep-warm pings homepage context — uses correct cache key matching the carousel
   var url  = API + "?shop=" + shop;
-  var CACHE_KEY = "nq_v6_" + shop + "_home";
+  var CACHE_KEY = "nq_v7_" + shop + "_home";
 
   function ping() {
     fetch(url, { keepalive: true })
