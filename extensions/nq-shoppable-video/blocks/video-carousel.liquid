@@ -106,19 +106,24 @@
   var CACHE_KEY = "nq_v5_" + shop + (productId ? "_pdp_" + productId : "_home");
   var rendered  = false;
 
+  // ─────────────────────────────────────────────────────────────
+  // FIX 1: Extended TTL — 10 minutes instead of 60 seconds.
+  // Videos load instantly on back-navigation for up to 10 min.
+  // View counts are still refreshed from API in the background.
+  // ─────────────────────────────────────────────────────────────
+  var CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
   function readCache() {
     try {
       var raw = localStorage.getItem(CACHE_KEY);
       if (!raw) return null;
       var obj = JSON.parse(raw);
-      // 5 minute TTL (300000ms) — keeps view counts fresh
-      if (Date.now() - obj.ts > 60000) { localStorage.removeItem(CACHE_KEY); return null; } // 60s TTL
+      if (Date.now() - obj.ts > CACHE_TTL_MS) { localStorage.removeItem(CACHE_KEY); return null; }
       return obj.data;
     } catch(e) { return null; }
   }
 
   function writeCache(data) {
-    // Never write empty video arrays to cache — causes blank page on refresh
     if (!data || !data.videos || data.videos.length === 0) return;
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
   }
@@ -130,17 +135,13 @@
   function renderVideos(data) {
     var raw = (data && data.videos) ? data.videos : [];
 
-    // Client-side filter: homepage shows only show_on=home, PDP shows only matching product
     if (!productId) {
-      // Homepage — filter to videos marked for homepage
       allVideos = raw.filter(function(v) {
         var showOn = Array.isArray(v.show_on) ? v.show_on : [];
         return showOn.includes("home") || showOn.indexOf("home") >= 0;
       });
-      // If none marked for homepage, show all live videos as fallback
       if (allVideos.length === 0 && raw.length > 0) allVideos = raw;
     } else {
-      // PDP — filter to videos tagged with this product
       var gid = "gid://shopify/Product/" + productId;
       allVideos = raw.filter(function(v) {
         var ids = Array.isArray(v.product_ids) ? v.product_ids : [];
@@ -179,17 +180,22 @@
     else                                   initScrollBtns();
   }
 
-  // Step 1: instant render from cache
+  // ─────────────────────────────────────────────────────────────
+  // FIX 2: Always render from cache first (instant), THEN
+  // silently refresh in background. No more blank carousel
+  // on back-navigation even if TTL is extended.
+  // ─────────────────────────────────────────────────────────────
   var cached = readCache();
   if (cached) {
-    console.log("[NQ " + blockId + "] Cache HIT");
+    console.log("[NQ " + blockId + "] Cache HIT — rendering instantly");
     renderVideos(cached);
   } else {
     console.log("[NQ " + blockId + "] Cache MISS — fetching API");
   }
 
-  // Step 2: fetch fresh data
   var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
+
+  // Only show timeout message if nothing has rendered yet
   var giveUp = setTimeout(function() {
     if (!rendered) {
       var cont = document.getElementById("nq-carousel-" + blockId);
@@ -214,8 +220,10 @@
         }
         writeCache(data);
         if (!rendered) {
+          // Nothing was shown from cache — render now
           renderVideos(data);
         } else {
+          // Already rendered from cache — just silently update view counts
           allVideos = data.videos || [];
           refreshAllViewCounters();
         }
@@ -236,23 +244,61 @@
 
   doFetch(3);
 
-  /* ── Re-render on back/forward navigation (bfcache restore) ── */
+  // ─────────────────────────────────────────────────────────────
+  // FIX 3: bfcache restore — instead of a full reload (slow!),
+  // just re-render from cache or re-fetch. Much faster.
+  // ─────────────────────────────────────────────────────────────
   window.addEventListener("pageshow", function(e) {
     if (e.persisted) {
-      // bfcache restore — force a clean reload so carousel re-initializes
-      window.location.reload();
+      console.log("[NQ] bfcache restore — re-initializing carousel");
+      var cont = document.getElementById("nq-carousel-" + blockId);
+      if (!cont) return;
+
+      // If carousel already has cards, just reinit scroll/3D buttons
+      var existingCards = cont.querySelectorAll(".nq-card");
+      if (existingCards.length > 0) {
+        console.log("[NQ] Cards already present, reinit controls only");
+        finishSetup(cont);
+        return;
+      }
+
+      // No cards — try cache first, then fetch
+      rendered = false;
+      var bfCached = readCache();
+      if (bfCached) {
+        console.log("[NQ] bfcache: rendering from localStorage cache");
+        renderVideos(bfCached);
+      } else {
+        console.log("[NQ] bfcache: no cache, fetching API");
+        doFetch(3);
+      }
     }
   });
 
-  /* ── Re-render when tab becomes visible after being hidden ── */
+  // ─────────────────────────────────────────────────────────────
+  // FIX 4: visibilitychange — only re-fetch if carousel is truly
+  // empty. Don't bust cache unnecessarily — that caused the blank
+  // screen while waiting 5 min for a cold API response.
+  // ─────────────────────────────────────────────────────────────
   document.addEventListener("visibilitychange", function() {
     if (document.visibilityState === "visible") {
       var cont = document.getElementById("nq-carousel-" + blockId);
-      if (cont && cont.querySelectorAll(".nq-card").length === 0) {
+      if (!cont) return;
+
+      var cardCount = cont.querySelectorAll(".nq-card").length;
+      if (cardCount === 0) {
+        // Carousel is genuinely empty — try cache, then fetch
         rendered = false;
-        bustCache();
-        doFetch(3);
+        var visCached = readCache();
+        if (visCached) {
+          console.log("[NQ] visibilitychange: re-rendering from cache");
+          renderVideos(visCached);
+        } else {
+          console.log("[NQ] visibilitychange: cache empty, fetching");
+          doFetch(3);
+        }
       }
+      // If cards exist, do nothing — carousel is fine
     }
   });
 
@@ -279,8 +325,6 @@
     videoEl.loop        = true;
     videoEl.playsInline = true;
     videoEl.className   = "nq-video-el";
-    // Show thumbnail as poster so card never shows black while loading
-    // First 3 cards: preload metadata for instant play; rest: lazy
     if (index < 3) {
       videoEl.preload = "metadata";
       videoEl.src = video.r2_url;
@@ -448,9 +492,8 @@
   }
 
   var _productCache = {};
-  var _allProductsCache = null; // bulk cache of all store products
+  var _allProductsCache = null;
 
-  // Pre-fetch all products once and cache them all by ID
   function prefetchAllProducts() {
     if (_allProductsCache) return _allProductsCache;
     _allProductsCache = fetch("/products.json?limit=250")
@@ -475,14 +518,12 @@
     return _allProductsCache;
   }
 
-  // Start prefetch immediately (non-blocking — cards render while this loads)
   prefetchAllProducts();
 
   function fetchProduct(productGidOrId) {
     var id = String(productGidOrId).replace("gid://shopify/Product/", "").trim();
     if (!id || id === "undefined") return Promise.resolve(null);
     if (_productCache[id]) return Promise.resolve(_productCache[id]);
-    // Wait for bulk fetch to complete then return exact product
     return prefetchAllProducts().then(function(cache) {
       return cache[id] || null;
     });
@@ -676,9 +717,7 @@
   }
 
   function trackView(video) {
-    // Log view event
     trackEvent("view", video);
-    // Increment locally for instant UI update
     video.views = (video.views || 0) + 1;
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (cont) {
@@ -692,36 +731,31 @@
     bustCache();
   }
 
-  // Track watch time — called every 5s while popup video plays
   var _watchInterval = null;
   function startWatchTracking(video) {
     stopWatchTracking();
     _watchInterval = setInterval(function() {
-      trackEvent("watch", video, 5); // 5 seconds watched
+      trackEvent("watch", video, 5);
     }, 5000);
   }
   function stopWatchTracking() {
     if (_watchInterval) { clearInterval(_watchInterval); _watchInterval = null; }
   }
 
-  // Global click tracker — reads video id from data attributes
   window.nqTrackClick = function(el) {
     try {
       var vid = el.getAttribute("data-video-id");
       var sh  = el.getAttribute("data-shop");
       if (!vid || !sh) return;
-      // Track click event
       fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + vid + "&shop=" + sh + "&event=click", {
         method: "GET", keepalive: true
       }).catch(function(){});
-      // Store in sessionStorage so we can attribute order to this video
       try {
         sessionStorage.setItem("nq_last_video", JSON.stringify({ id: vid, shop: sh, ts: Date.now() }));
       } catch(e) {}
     } catch(e) {}
   };
 
-  // Track order on Shopify thank-you/order-status page
   (function() {
     try {
       var isThankYou = window.location.pathname.indexOf("/thank_you") >= 0 ||
@@ -732,10 +766,8 @@
       var stored = sessionStorage.getItem("nq_last_video");
       if (!stored) return;
       var last = JSON.parse(stored);
-      // Only attribute if click was within last 30 minutes
       if (Date.now() - last.ts > 30 * 60 * 1000) return;
 
-      // Get order value from Shopify checkout object if available
       var orderValue = 0;
       if (typeof Shopify !== "undefined" && Shopify.checkout && Shopify.checkout.total_price) {
         orderValue = parseFloat(Shopify.checkout.total_price);
@@ -745,7 +777,6 @@
         method: "GET", keepalive: true
       }).catch(function(){});
 
-      // Clear so we don't double-count
       sessionStorage.removeItem("nq_last_video");
     } catch(e) {}
   })();
@@ -807,21 +838,24 @@
 
   var API  = "https://queuniverse-shoppable.vercel.app/api/videos";
   var shop = "{{ shop.permanent_domain }}";
-  // Keep-warm pings homepage context — uses correct cache key matching the carousel
   var url  = API + "?shop=" + shop;
   var CACHE_KEY = "nq_v5_" + shop + "_home";
 
+  // ─────────────────────────────────────────────────────────────
+  // FIX 5: Keep-warm now also pre-populates cache if missing,
+  // so the carousel renders instantly even on a cold first load.
+  // ─────────────────────────────────────────────────────────────
   function ping() {
     fetch(url, { keepalive: true })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        // Keep-warm: only update cache if carousel hasn't loaded yet
-        // This prevents overwriting fresher data the carousel already has
         if (data && data.videos && data.videos.length > 0) {
           try {
             var existing = localStorage.getItem(CACHE_KEY);
             if (!existing) {
+              // No cache yet — write it so carousel renders instantly on next navigation
               localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+              console.log("[NQ Keep-warm] Pre-populated cache with", data.videos.length, "videos");
             }
           } catch(e) {}
         }
