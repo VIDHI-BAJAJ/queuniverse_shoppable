@@ -365,33 +365,49 @@
       videoEl.preload = "none";
     }
 
-    card.onmouseenter = function() {
-      if (!videoEl.src && videoEl.dataset.src) {
-        videoEl.src     = videoEl.dataset.src;
-        videoEl.preload = "auto";
-      }
-      videoEl.play().catch(function(){});
-    };
-    card.onmouseleave = function() { videoEl.pause(); videoEl.currentTime = 0; };
-    card.onclick      = function() { nqOpenPopup(blockId, index); };
+    card.onclick = function() { nqOpenPopup(blockId, index); };
 
-    /* Only lazy-observe cards that don't already have src (index >= 6) */
-    if (index >= 6) {
-      if ("IntersectionObserver" in window) {
+    /* ── AUTOPLAY ON SCROLL INTO VIEW ──
+       - Plays automatically when card enters viewport (no hover needed)
+       - Pauses when card leaves viewport (saves bandwidth)
+       - Hover still works on desktop as a bonus (keeps playing)
+       - For lazy cards (index >= 6): also loads src 400px before entering
+    */
+    if ("IntersectionObserver" in window) {
+      /* Separate observer for lazy src loading (400px ahead) */
+      if (index >= 6) {
         new IntersectionObserver(function(entries, obs) {
           entries.forEach(function(e) {
             if (e.isIntersecting) {
               if (videoEl.dataset.src && !videoEl.src) {
                 videoEl.src     = videoEl.dataset.src;
-                videoEl.preload = "metadata";
+                videoEl.preload = "auto";
               }
               obs.unobserve(e.target);
             }
           });
         }, { rootMargin: "400px" }).observe(card);
-      } else {
-        videoEl.src = video.r2_url;
       }
+
+      /* Play/pause observer — fires when card is actually visible */
+      new IntersectionObserver(function(entries) {
+        entries.forEach(function(e) {
+          if (e.isIntersecting) {
+            if (videoEl.dataset.src && !videoEl.src) {
+              videoEl.src     = videoEl.dataset.src;
+              videoEl.preload = "auto";
+            }
+            videoEl.play().catch(function(){});
+          } else {
+            videoEl.pause();
+          }
+        });
+      }, { threshold: 0.3 }).observe(card);
+    } else {
+      /* Fallback: no IntersectionObserver — play on hover */
+      videoEl.src = video.r2_url;
+      card.onmouseenter = function() { videoEl.play().catch(function(){}); };
+      card.onmouseleave = function() { videoEl.pause(); videoEl.currentTime = 0; };
     }
 
     var views = document.createElement("div");
