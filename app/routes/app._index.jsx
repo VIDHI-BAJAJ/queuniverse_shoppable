@@ -1,227 +1,148 @@
 import { useLoaderData, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
 import { supabase } from "../supabase.server";
-import { useState } from "react";
-// No external chart library needed - using inline SVG
- 
- 
+import { useState, useMemo } from "react";
+
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
- 
+
   try {
     const { data: videos } = await supabase
       .from("videos")
       .select("id, status, views, created_at, product_ids")
       .eq("shop_id", shop);
- 
+
+    // Fetch ALL events — we filter by date on the frontend
     const { data: events } = await supabase
       .from("video_events")
       .select("*")
       .eq("shop_id", shop)
       .order("created_at", { ascending: true });
- 
-    const total = videos?.length || 0;
-    const live = videos?.filter(v => v.status === "live").length || 0;
-    const totalViews = videos?.reduce((sum, v) => sum + (v.views || 0), 0) || 0;
+
+    const total       = videos?.length || 0;
+    const live        = videos?.filter(v => v.status === "live").length || 0;
+    const totalViews  = videos?.reduce((sum, v) => sum + (v.views || 0), 0) || 0;
     const withProducts = videos?.filter(v => v.product_ids?.length > 0).length || 0;
- 
-    // Build daily chart data from events (last 90 days)
-    const eventsData = events || [];
-    const dailyMap = {};
-    eventsData.forEach(e => {
-      const day = e.created_at?.slice(0, 10);
-      if (!day) return;
-      if (!dailyMap[day]) dailyMap[day] = { date: day, views: 0, clicks: 0, orders: 0, watch_seconds: 0 };
-      if (e.event_type === "view")   dailyMap[day].views++;
-      if (e.event_type === "click")  dailyMap[day].clicks++;
-      if (e.event_type === "order")  dailyMap[day].orders++;
-      if (e.event_type === "watch")  dailyMap[day].watch_seconds += (e.value || 0);
-    });
- 
-    // Fill in views from videos.views if no events table yet
-    // (graceful fallback: spread total views across all-time evenly)
-    const chartData = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
- 
-    // Aggregate metrics from events
-    const totalClicks      = eventsData.filter(e => e.event_type === "click").length;
-    const totalOrders      = eventsData.filter(e => e.event_type === "order").length;
-    const totalWatchSec    = eventsData.filter(e => e.event_type === "watch").reduce((s, e) => s + (e.value || 0), 0);
-    const totalRevenue     = eventsData.filter(e => e.event_type === "order").reduce((s, e) => s + (e.value || 0), 0);
-    const avgOrderValue    = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-    const conversionRate   = totalViews > 0 ? ((totalOrders / totalViews) * 100).toFixed(2) : "0.00";
-    const watchHours       = (totalWatchSec / 3600).toFixed(1);
-    const impressionSales  = totalRevenue;
- 
-    // Build chart from video_events if available, else show totalViews on today
-    let finalChartData = chartData;
-    if (finalChartData.length === 0 && totalViews > 0) {
-      // No events table yet — show total views on today's date so graph isn't empty
-      const today = new Date().toISOString().slice(0, 10);
-      finalChartData = [{ date: today, views: totalViews, clicks: 0, orders: 0 }];
-    }
- 
+
     return {
       total, live, totalViews, withProducts,
-      totalClicks, totalOrders, totalWatchSec,
-      totalRevenue, avgOrderValue, conversionRate,
-      watchHours, impressionSales,
-      chartData: finalChartData,
+      events: events || [],   // send ALL raw events to frontend
     };
   } catch (e) {
     console.error("Dashboard loader error:", e);
-    return {
-      total: 0, live: 0, totalViews: 0, withProducts: 0,
-      totalClicks: 0, totalOrders: 0, totalWatchSec: 0,
-      totalRevenue: 0, avgOrderValue: 0, conversionRate: "0.00",
-      watchHours: "0.0", impressionSales: 0,
-      chartData: [],
-    };
+    return { total: 0, live: 0, totalViews: 0, withProducts: 0, events: [] };
   }
 };
- 
- 
+
 const RANGES = [
-  { label: "Last 7 days",  days: 7 },
+  { label: "Last 7 days",  days: 7  },
   { label: "Last 30 days", days: 30 },
   { label: "Last 90 days", days: 90 },
   { label: "All time",     days: null },
 ];
- 
- 
+
 function fmtINR(v) {
   return "₹" + Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 function fmtNum(v) {
   return Number(v || 0).toLocaleString("en-IN");
 }
- 
+
 export default function Index() {
-  const data = useLoaderData();
+  const data     = useLoaderData();
   const navigate = useNavigate();
- 
-  const [activeRange, setActiveRange] = useState(1);
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
- 
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
- 
- 
-  // Filter chartData by selected range
- 
+
+  const [activeRange, setActiveRange] = useState(1); // default: Last 30 days
+  const [customFrom, setCustomFrom]   = useState("");
+  const [customTo,   setCustomTo]     = useState("");
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // ── Compute date window ──────────────────────────────────────
+  const { fromDate, toDate } = useMemo(() => {
+    if (customFrom && customTo) {
+      return { fromDate: customFrom, toDate: customTo };
+    }
+    const days = RANGES[activeRange].days;
+    if (!days) return { fromDate: null, toDate: null }; // All time
+    const from = new Date();
+    from.setDate(from.getDate() - days);
+    return { fromDate: from.toISOString().slice(0, 10), toDate: todayStr };
+  }, [activeRange, customFrom, customTo, todayStr]);
+
+  // ── Filter events by date window ─────────────────────────────
+  const filteredEvents = useMemo(() => {
+    return (data.events || []).filter(e => {
+      if (!e.created_at) return false;
+      const day = e.created_at.slice(0, 10);
+      if (fromDate && day < fromDate) return false;
+      if (toDate   && day > toDate)   return false;
+      return true;
+    });
+  }, [data.events, fromDate, toDate]);
+
+  // ── Compute metrics from filtered events ─────────────────────
+  const metrics = useMemo(() => {
+    const clicks     = filteredEvents.filter(e => e.event_type === "click").length;
+    const orders     = filteredEvents.filter(e => e.event_type === "order").length;
+    const watchSec   = filteredEvents.filter(e => e.event_type === "watch")
+                         .reduce((s, e) => s + (e.value || 0), 0);
+    const revenue    = filteredEvents.filter(e => e.event_type === "order")
+                         .reduce((s, e) => s + (e.value || 0), 0);
+    const views      = filteredEvents.filter(e => e.event_type === "view").length;
+
+    // Fall back to videos.views total if no view events recorded yet
+    const displayViews   = views > 0 ? views : data.totalViews;
+    const watchHours     = (watchSec / 3600).toFixed(1);
+    const avgOrderValue  = orders > 0 ? revenue / orders : 0;
+    const conversionRate = displayViews > 0 ? ((orders / displayViews) * 100).toFixed(2) : "0.00";
+
+    return { clicks, orders, watchSec, watchHours, revenue, displayViews, avgOrderValue, conversionRate };
+  }, [filteredEvents, data.totalViews]);
+
+  // ── Stats cards ──────────────────────────────────────────────
   const stats = [
-    { label: "Total Videos",        value: fmtNum(data.total),         sub: `${data.live} live` },
-    { label: "Total Views",          value: fmtNum(data.totalViews),     sub: "Cumulative" },
-    { label: "Buy Now Clicks",       value: fmtNum(data.totalClicks),     sub: "Product taps" },
-    { label: "Total Orders",         value: fmtNum(data.totalOrders),     sub: "From videos" },
-    { label: "Watch Time",           value: data.watchHours + " hrs",     sub: "Total watched" },
+    { label: "Total Videos",   value: fmtNum(data.total),           sub: `${data.live} live` },
+    { label: "Total Views",    value: fmtNum(metrics.displayViews),  sub: "Cumulative" },
+    { label: "Buy Now Clicks", value: fmtNum(metrics.clicks),        sub: "Shop Now taps" },
+    { label: "Total Orders",   value: fmtNum(metrics.orders),        sub: "From videos" },
+    { label: "Watch Time",     value: metrics.watchHours + " hrs",   sub: "Total watched" },
   ];
- 
+
   const engagement = [
-    { label: "Total Engagement",       value: fmtNum((data.totalViews || 0) + (data.totalClicks || 0)) },
-    { label: "Product Clicks",         value: fmtNum(data.totalClicks) },
-    { label: "Impression Sales",       value: fmtINR(data.impressionSales) },
-    { label: "Avg Order Value",        value: fmtINR(data.avgOrderValue) },
-    { label: "Video Watched Sessions", value: fmtNum(data.totalViews) },
-    { label: "Video Conversion Rate",  value: data.conversionRate + "%" },
+    { label: "Total Engagement",       value: fmtNum((metrics.displayViews || 0) + (metrics.clicks || 0)) },
+    { label: "Product Clicks",         value: fmtNum(metrics.clicks) },
+    { label: "Impression Sales",       value: fmtINR(metrics.revenue) },
+    { label: "Avg Order Value",        value: fmtINR(metrics.avgOrderValue) },
+    { label: "Video Watched Sessions", value: fmtNum(metrics.displayViews) },
+    { label: "Video Conversion Rate",  value: metrics.conversionRate + "%" },
   ];
 
+  // ── Styles ───────────────────────────────────────────────────
   const s = {
-    page: {
-      padding: "28px 32px",
-      background: "#f8f9fb",
-      fontFamily: "'Inter', system-ui, sans-serif" ,
-      minHeight: "100vh",
-    },
-    header: {
-      display: "flex", justifyContent: "space-between",
-      alignItems: "center", marginBottom: "28px",
-    },
+    page: { padding: "28px 32px", fontFamily: "'Inter', system-ui, sans-serif", minHeight: "100vh" },
+    header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "28px" },
     title: { margin: 0, fontSize: "20px", fontWeight: "500", color: "#000" },
-    manageBtn: {
-      padding: "10px 22px", background: "#485861", color: "#fff",
-      border: "#0a0a0a", borderRadius: "8px", cursor: "pointer",
-      fontSize: "14px", fontWeight: "500",
-    },
-
-    // Range selector
-    rangeWrap: {
-      display: "flex", alignItems: "center",
-    gap: "6px", marginBottom: "24px",
-    flexWrap: "wrap", padding: "12px 16px",
-    background: "#fafaf8", borderRadius: "10px",
-    border: "1px solid #f0f0ee"
-    },
+    manageBtn: { padding: "10px 22px", background: "#485861", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "14px", fontWeight: "500" },
+    rangeWrap: { display: "flex", alignItems: "center", gap: "6px", marginBottom: "24px", flexWrap: "wrap", padding: "12px 16px", background: "#fafaf8", borderRadius: "10px", border: "1px solid #f0f0ee" },
     rangeLabel: { fontSize: "13px", fontWeight: "600", color: "#64748b", marginRight: "4px" },
-    rangeBtn: (active) => ({
-      padding: "6px 12px", borderRadius: "20px", border: "none",
-      cursor: "pointer", fontSize: "12px", fontWeight: "500",
-      background: active ? "#485861" : "#fff",
-      color: active ? "#fff" : "#6b6b66",
-      transition: "all 0.15s",
-    }),
-    dateInput: {
-      padding: "7px 12px", border: "1.5px solid #e2e8f0",
-      borderRadius: "8px", fontSize: "13px", color: "#0f172a",
-      background: "#fff", cursor: "pointer",
-    },
+    rangeBtn: (active) => ({ padding: "6px 12px", borderRadius: "20px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "500", background: active ? "#485861" : "#fff", color: active ? "#fff" : "#6b6b66", transition: "all 0.15s" }),
+    dateInput: { padding: "7px 12px", border: "1.5px solid #e2e8f0", borderRadius: "8px", fontSize: "13px", color: "#0f172a", background: "#fff", cursor: "pointer" },
     dateSep: { color: "#94a3b8", fontSize: "14px" },
-
-    // Stat cards row
-    statsRow: {
-      display: "grid",
-      gridTemplateColumns: "repeat(5, 1fr)",
-      gap: "16px", marginBottom: "28px",
-    },
-    statCard: {
-      background: "#fff", borderRadius: "10px",
-      padding: "20px 18px",
-      boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
-      border: "1px solid #f1f5f9", borderTop: "1px solid #485861"
-    },
+    statsRow: { display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px", marginBottom: "28px" },
+    statCard: { background: "#fff", borderRadius: "10px", padding: "20px 18px", boxShadow: "0 1px 4px rgba(0,0,0,0.07)", border: "1px solid #f1f5f9", borderTop: "3px solid #485861" },
     statLabel: { fontSize: "12px", fontWeight: "500", color: "#9a9a93", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" },
     statValue: { fontSize: "28px", fontWeight: "300", color: "#0a0a0a", lineHeight: 1 },
     statSub:   { fontSize: "11px", color: "#9a9a93", marginTop: "6px" },
-
-    // Chart card
-    chartCard: {
-      background: "#fff", borderRadius: "14px",
-      padding: "24px", marginBottom: "28px",
-      border: "1px solid #f1f5f9",
-      borderTop: "1px solid #485861"
-    },
-    chartHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" },
-    chartTitle: { margin: 0, fontSize: "16px", fontWeight: "500", color: "#0f172a" },
-    metricBtns: { display: "flex", gap: "8px" },
-    metricBtn: (active, color) => ({
-      padding: "6px 16px", borderRadius: "20px", border: "2px solid",
-      borderColor: active ? color : "#485861",
-      background: active ? color : "#fff",
-      color: active ? "#fff" : "#485861",
-      cursor: "pointer", fontSize: "13px", fontWeight: "500",
-      transition: "all 0.15s",
-    }),
-
-    // Engagement grid
     engTitle: { fontSize: "17px", fontWeight: "700", color: "#0f172a", marginBottom: "16px" },
-    engGrid: {
-      display: "grid",
-      gridTemplateColumns: "repeat(3, 1fr)",
-      gap: "16px",
-    },
-    engCard: {
-      background: "#fff", borderRadius: "14px",
-      padding: "20px 22px",
-      border: "1px solid #f1f5f9",
-      borderTop: "1px solid #485861"
-    },
+    engGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" },
+    engCard: { background: "#fff", borderRadius: "14px", padding: "20px 22px", border: "1px solid #f1f5f9", borderTop: "3px solid #485861" },
     engLabel: { fontSize: "12px", fontWeight: "600", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "10px" },
     engValue: { fontSize: "16px", fontWeight: "500", color: "#0f172a" },
   };
 
-
-return (
+  return (
     <div style={s.page}>
       {/* Header */}
       <div style={s.header}>
@@ -230,7 +151,7 @@ return (
           Manage Videos →
         </button>
       </div>
- 
+
       {/* Date Range Selector */}
       <div style={s.rangeWrap}>
         <span style={s.rangeLabel}>RANGE</span>
@@ -255,8 +176,8 @@ return (
           onChange={e => setCustomTo(e.target.value)}
         />
       </div>
- 
-      {/* Top Stats Row */}
+
+      {/* Top Stats */}
       <div style={s.statsRow}>
         {stats.map(st => (
           <div key={st.label} style={s.statCard}>
@@ -266,8 +187,8 @@ return (
           </div>
         ))}
       </div>
- 
-      {/* Engagement Metrics */}
+
+      {/* Engagement */}
       <div style={s.engTitle}>Engagement Overview</div>
       <div style={s.engGrid}>
         {engagement.map(e => (
