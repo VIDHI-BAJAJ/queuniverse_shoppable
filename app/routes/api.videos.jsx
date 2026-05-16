@@ -15,7 +15,7 @@ export const loader = async ({ request }) => {
   const headers = {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "public, max-age=300, stale-while-revalidate=600",
+    "Cache-Control": "public, max-age=30, stale-while-revalidate=60",
   };
 
   try {
