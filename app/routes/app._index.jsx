@@ -126,6 +126,7 @@ export default function Index() {
     { label: "Video Watched Sessions", value: fmtNum(data.totalViews) },
     { label: "Video Conversion Rate",  value: data.conversionRate + "%" },
   ];
+  
   const s = {
     page: {
       padding: "28px 32px",

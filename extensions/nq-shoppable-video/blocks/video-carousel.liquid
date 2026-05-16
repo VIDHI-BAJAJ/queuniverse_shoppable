@@ -239,14 +239,8 @@
   /* ── Re-render on back/forward navigation (bfcache restore) ── */
   window.addEventListener("pageshow", function(e) {
     if (e.persisted) {
-      // Page restored from bfcache — always re-render
-      var cont = document.getElementById("nq-carousel-" + blockId);
-      if (cont) {
-        rendered = false;
-        cont.innerHTML = ""; // clear skeleton/stale cards
-        bustCache();
-        doFetch(3);
-      }
+      // bfcache restore — force a clean reload so carousel re-initializes
+      window.location.reload();
     }
   });
 
