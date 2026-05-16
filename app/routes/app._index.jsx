@@ -10,31 +10,24 @@ export const loader = async ({ request }) => {
   try {
     const { data: videos } = await supabase
       .from("videos")
-      .select("id, status, views, buy_now_clicks, watch_seconds, created_at, product_ids")
+      .select("id, status, views, buy_now_clicks, watch_seconds, orders, revenue, created_at, product_ids")
       .eq("shop_id", shop);
 
-    // video_events for orders only
-    const { data: events } = await supabase
-      .from("video_events")
-      .select("*")
-      .eq("shop_id", shop)
-      .eq("event_type", "order")
-      .order("created_at", { ascending: true });
-
-    const total        = videos?.length || 0;
-    const live         = videos?.filter(v => v.status === "live").length || 0;
-    const totalViews   = videos?.reduce((sum, v) => sum + (v.views || 0), 0) || 0;
-    const totalClicks  = videos?.reduce((sum, v) => sum + (v.buy_now_clicks || 0), 0) || 0;
-    const totalWatchSec= videos?.reduce((sum, v) => sum + (v.watch_seconds || 0), 0) || 0;
+    const total         = videos?.length || 0;
+    const live          = videos?.filter(v => v.status === "live").length || 0;
+    const totalViews    = videos?.reduce((sum, v) => sum + (v.views        || 0), 0) || 0;
+    const totalClicks   = videos?.reduce((sum, v) => sum + (v.buy_now_clicks || 0), 0) || 0;
+    const totalWatchSec = videos?.reduce((sum, v) => sum + (v.watch_seconds || 0), 0) || 0;
+    const totalOrders   = videos?.reduce((sum, v) => sum + (v.orders        || 0), 0) || 0;
+    const totalRevenue  = videos?.reduce((sum, v) => sum + (v.revenue       || 0), 0) || 0;
 
     return {
-      total, live, totalViews, totalClicks, totalWatchSec,
+      total, live, totalViews, totalClicks, totalWatchSec, totalOrders, totalRevenue,
       videos: videos || [],
-      orderEvents: events || [],
     };
   } catch (e) {
     console.error("Dashboard loader error:", e);
-    return { total: 0, live: 0, totalViews: 0, totalClicks: 0, totalWatchSec: 0, videos: [], orderEvents: [] };
+    return { total: 0, live: 0, totalViews: 0, totalClicks: 0, totalWatchSec: 0, totalOrders: 0, totalRevenue: 0, videos: [] };
   }
 };
 
@@ -71,36 +64,25 @@ export default function Index() {
     return { fromDate: from.toISOString().slice(0, 10), toDate: todayStr };
   }, [activeRange, customFrom, customTo, todayStr]);
 
-  // Filter order events by date range
-  const filteredOrders = useMemo(() => {
-    return (data.orderEvents || []).filter(e => {
-      if (!e.created_at) return false;
-      const day = e.created_at.slice(0, 10);
-      if (fromDate && day < fromDate) return false;
-      if (toDate   && day > toDate)   return false;
-      return true;
-    });
-  }, [data.orderEvents, fromDate, toDate]);
-
   const metrics = useMemo(() => {
-    // All from videos table (actual source of truth)
-    const displayViews  = data.totalViews;
-    const totalClicks   = data.totalClicks;
-    const totalSec = data.totalWatchSec || 0;
+    // All metrics come directly from videos table
+    const displayViews = data.totalViews;
+    const totalClicks  = data.totalClicks;
+    const orders       = data.totalOrders;
+    const revenue      = data.totalRevenue;
+
+    const totalSec   = data.totalWatchSec || 0;
     const watchHours = totalSec >= 3600
       ? (totalSec / 3600).toFixed(1) + " hrs"
       : totalSec >= 60
         ? Math.floor(totalSec / 60) + " min"
         : Math.round(totalSec) + " sec";
 
-    // Orders from video_events
-    const orders   = filteredOrders.length;
-    const revenue  = filteredOrders.reduce((s, e) => s + (e.value || 0), 0);
     const avgOrderValue  = orders > 0 ? revenue / orders : 0;
     const conversionRate = displayViews > 0 ? ((orders / displayViews) * 100).toFixed(2) : "0.00";
 
     return { displayViews, totalClicks, watchHours, orders, revenue, avgOrderValue, conversionRate };
-  }, [data.totalViews, data.totalClicks, data.totalWatchSec, filteredOrders]);
+  }, [data.totalViews, data.totalClicks, data.totalWatchSec, data.totalOrders, data.totalRevenue]);
 
   const stats = [
     { label: "Total Videos",   value: fmtNum(data.total),            sub: `${data.live} live` },

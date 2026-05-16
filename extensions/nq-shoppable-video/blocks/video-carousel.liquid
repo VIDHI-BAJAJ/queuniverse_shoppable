@@ -797,7 +797,11 @@
       /* 2. Fire click event — same GET fetch that view tracking uses (proven to work) */
       var clickPromise;
       try {
-        sessionStorage.setItem("nq_last_video", JSON.stringify({ id: videoId, shop: shop, ts: Date.now() }));
+        var nqPayload = JSON.stringify({ id: videoId, shop: shop, ts: Date.now() });
+        sessionStorage.setItem("nq_last_video", nqPayload);
+        /* Also backup to localStorage — Gokwik redirects to external domain
+           which wipes sessionStorage. Web pixel restores it on return. */
+        localStorage.setItem("nq_last_video_backup", nqPayload);
         clickPromise = trackEvent("click", video);
       } catch(err) {
         clickPromise = Promise.resolve();

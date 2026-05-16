@@ -1,0 +1,9 @@
+name = "nq-order-pixel"
+type = "web_pixel_extension"
+
+runtime_context = "strict"
+
+[settings]
+  [[settings.fields]]
+  name = "accountID"
+  type = "single_line_text_field"
