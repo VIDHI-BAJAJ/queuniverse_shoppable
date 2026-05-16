@@ -1,6 +1,10 @@
 {{ 'nq-carousel.css' | asset_url | stylesheet_tag }}
 <link rel="preconnect" href="https://queuniverse-shoppable.vercel.app" crossorigin>
 <link rel="dns-prefetch" href="https://queuniverse-shoppable.vercel.app">
+<!-- NQ: preconnect to R2/CDN origin so first video loads instantly -->
+<link rel="preconnect" href="https://pub-d6dfe6c73ab249958b2610cf47b17860.r2.dev" crossorigin>
+<link rel="dns-prefetch" href="https://pub-d6dfe6c73ab249958b2610cf47b17860.r2.dev">
+<div id="nq-first-video-preload-{{ block.id }}"></div>
 
 <div class="nq-section nq-tile-type-{{ block.settings.tile_type }}"
      style="padding: {{ block.settings.vertical_padding }}px {{ block.settings.horizontal_padding }}px;">
@@ -134,11 +138,26 @@
     }
   }
 
+  /* ── Inject a <link rel="preload"> for the first video URL so the browser
+        fetches it at highest priority, in parallel with everything else.    ── */
+  function preloadFirstVideoLink(url) {
+    if (!url || document.querySelector('link[data-nq-preload="1"]')) return;
+    var link = document.createElement("link");
+    link.rel          = "preload";
+    link.as           = "video";
+    link.href         = url;
+    link.setAttribute("data-nq-preload", "1");
+    document.head.appendChild(link);
+  }
+
   function renderVideos(data) {
     var raw = (data && data.videos) ? data.videos : [];
     allVideos = filterVideos(raw);
 
     console.log("[NQ] renderVideos:", allVideos.length, "videos");
+
+    /* Preload first video at highest network priority */
+    if (allVideos.length) preloadFirstVideoLink(allVideos[0].r2_url);
 
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (!cont) { console.warn("[NQ] container not found"); return; }
@@ -328,33 +347,51 @@
     videoEl.playsInline = true;
     videoEl.className   = "nq-video-el";
 
+    /* ── FAST VIDEO LOADING STRATEGY ──
+       index 0-2 → preload="auto"     + src set immediately (visible cards, buffer fully)
+       index 3-5 → preload="metadata" + src set immediately (next scroll targets)
+       index 6+  → preload="none"     + lazy src via IntersectionObserver 400px ahead
+    */
+    if (video.thumbnail_url) videoEl.poster = video.thumbnail_url;
+    videoEl.dataset.src = video.r2_url;
+
     if (index < 3) {
+      videoEl.preload = "auto";
+      videoEl.src     = video.r2_url;
+    } else if (index < 6) {
       videoEl.preload = "metadata";
       videoEl.src     = video.r2_url;
     } else {
       videoEl.preload = "none";
     }
-    if (video.thumbnail_url) videoEl.poster = video.thumbnail_url;
-    videoEl.dataset.src = video.r2_url;
 
     card.onmouseenter = function() {
-      if (!videoEl.src && videoEl.dataset.src) videoEl.src = videoEl.dataset.src;
+      if (!videoEl.src && videoEl.dataset.src) {
+        videoEl.src     = videoEl.dataset.src;
+        videoEl.preload = "auto";
+      }
       videoEl.play().catch(function(){});
     };
     card.onmouseleave = function() { videoEl.pause(); videoEl.currentTime = 0; };
     card.onclick      = function() { nqOpenPopup(blockId, index); };
 
-    if ("IntersectionObserver" in window) {
-      new IntersectionObserver(function(entries, obs) {
-        entries.forEach(function(e) {
-          if (e.isIntersecting) {
-            if (videoEl.dataset.src && !videoEl.src) videoEl.src = videoEl.dataset.src;
-            obs.unobserve(e.target);
-          }
-        });
-      }, { rootMargin: "200px" }).observe(card);
-    } else {
-      videoEl.src = video.r2_url;
+    /* Only lazy-observe cards that don't already have src (index >= 6) */
+    if (index >= 6) {
+      if ("IntersectionObserver" in window) {
+        new IntersectionObserver(function(entries, obs) {
+          entries.forEach(function(e) {
+            if (e.isIntersecting) {
+              if (videoEl.dataset.src && !videoEl.src) {
+                videoEl.src     = videoEl.dataset.src;
+                videoEl.preload = "metadata";
+              }
+              obs.unobserve(e.target);
+            }
+          });
+        }, { rootMargin: "400px" }).observe(card);
+      } else {
+        videoEl.src = video.r2_url;
+      }
     }
 
     var views = document.createElement("div");
@@ -735,16 +772,41 @@
     } catch(e) {}
   })();
 
+  /* ── Hidden preload video element for popup next-video buffering ── */
+  var _preloadVid = document.createElement("video");
+  _preloadVid.muted       = true;
+  _preloadVid.preload     = "auto";
+  _preloadVid.style.display = "none";
+  document.body.appendChild(_preloadVid);
+
+  function preloadNextPopupVideo() {
+    var nextIdx = (currentIndex + 1) % allVideos.length;
+    var nextVideo = allVideos[nextIdx];
+    if (nextVideo && nextVideo.r2_url && _preloadVid.src !== nextVideo.r2_url) {
+      _preloadVid.src = nextVideo.r2_url;
+    }
+  }
+
   function showPopup(bid) {
     /* Always flush the previous video's watch time before starting the next */
     stopWatchTracking();
 
     var video = allVideos[currentIndex];
     var vid   = document.getElementById("nq-popup-video-" + bid);
-    vid.src   = video.r2_url;
+
+    /* If the hidden preloader already buffered this video, swap its source object */
+    if (_preloadVid.src === video.r2_url && _preloadVid.readyState >= 2) {
+      /* Clone buffered data by pointing popup video at same src — browser cache handles the rest */
+      vid.src = video.r2_url;
+    } else {
+      vid.src = video.r2_url;
+    }
     vid.play();
     trackView(video);
     startWatchTracking(video);
+
+    /* Start buffering the next video in the background */
+    setTimeout(preloadNextPopupVideo, 500);
 
     var pd = document.getElementById("nq-popup-product-" + bid);
     pd.innerHTML = "";
@@ -858,6 +920,21 @@
             localStorage.setItem(KEY, JSON.stringify({ ts: Date.now(), data: data }));
             console.log("[NQ Keep-warm] Cache updated:", data.videos.length, "videos");
           }
+          /* Preload the first video from R2 so it is in browser cache on page load */
+          try {
+            var firstVid = data.videos[0];
+            if (firstVid && firstVid.r2_url) {
+              var vLink = document.querySelector('link[data-nq-keepwarm="1"]');
+              if (!vLink) {
+                vLink = document.createElement("link");
+                vLink.rel = "preload";
+                vLink.as  = "video";
+                vLink.setAttribute("data-nq-keepwarm", "1");
+                document.head.appendChild(vLink);
+              }
+              vLink.href = firstVid.r2_url;
+            }
+          } catch(e) {}
         } catch(e) {}
       })
       .catch(function() { setTimeout(ping, 20000); });
