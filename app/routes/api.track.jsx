@@ -1,11 +1,11 @@
-import { supabase } from "../supabase.server";
-
 const HEADERS = {
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "*",
 };
+
+import { supabase } from "../supabase.server.js";
 
 export const loader = async ({ request }) => {
   if (request.method === "OPTIONS") {

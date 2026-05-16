@@ -1,4 +1,4 @@
-import { supabase } from "../supabase.server";
+import { supabase } from "../supabase.server.js";
 
 export const loader = async ({ request }) => {
   if (request.method === "OPTIONS") {
