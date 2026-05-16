@@ -237,20 +237,25 @@
   doFetch(3);
 
   /* ── Re-render on back/forward navigation (bfcache restore) ── */
-  // Mark page as visited so back navigation can detect it
-  try { sessionStorage.setItem("nq_visited", "1"); } catch(e) {}
-
   window.addEventListener("pageshow", function(e) {
     if (e.persisted) {
-      // bfcache restore — re-render carousel
-      var cont = document.getElementById("nq-carousel-" + blockId);
-      if (cont) {
-        rendered = false;
-        cont.innerHTML = "";
-        doFetch(3);
+      // bfcache restore: page frozen in memory, JS state lost
+      // Only safe fix is reload — use sessionStorage flag to prevent loop
+      try {
+        if (!sessionStorage.getItem("nq_reloading")) {
+          sessionStorage.setItem("nq_reloading", "1");
+          window.location.reload();
+        } else {
+          sessionStorage.removeItem("nq_reloading");
+        }
+      } catch(e) {
+        window.location.reload();
       }
     }
   });
+
+  // Clear reload flag on normal page load
+  try { sessionStorage.removeItem("nq_reloading"); } catch(e) {}
 
   /* ── Re-render when tab becomes visible after being hidden ── */
   document.addEventListener("visibilitychange", function() {
