@@ -44,24 +44,15 @@
 
 </div>
 
-<!-- Fullscreen Popup — Desktop: left/right arrows | Mobile: full-screen reel swipe -->
 <div class="nq-popup" id="nq-popup-{{ block.id }}">
-  <!-- Desktop overlay click to close -->
   <div class="nq-popup-overlay" id="nq-popup-overlay-{{ block.id }}"></div>
-
-  <!-- Desktop layout: prev | video | next -->
   <div class="nq-popup-content" id="nq-popup-content-{{ block.id }}">
     <button class="nq-popup-prev" onclick="nqPrevVideo('{{ block.id }}')">&#10094;</button>
     <div class="nq-popup-video-wrap" id="nq-popup-wrap-{{ block.id }}">
-      <!-- Close button -->
       <button class="nq-popup-close" onclick="nqClosePopup('{{ block.id }}')">&#10005;</button>
-      <!-- Mute toggle -->
       <button class="nq-popup-mute" id="nq-popup-mute-{{ block.id }}" onclick="nqToggleMute('{{ block.id }}')">&#128263;</button>
-      <!-- Video -->
       <video class="nq-popup-video" id="nq-popup-video-{{ block.id }}" autoplay muted playsinline></video>
-      <!-- Product card -->
       <div class="nq-popup-product" id="nq-popup-product-{{ block.id }}"></div>
-      <!-- Mobile swipe hint (shown briefly on first open) -->
       <div class="nq-swipe-hint" id="nq-swipe-hint-{{ block.id }}">
         <span>&#8593; Swipe up for next</span>
       </div>
@@ -83,21 +74,18 @@
   var currentIndex = 0;
   var active3D = 0;
 
-  // Detect if we are on a product page
   var productId = null;
   {% if product %}
   productId = "{{ product.id }}";
   {% endif %}
 
-  /* ── CACHE: v5 — clears all old broken cache on every page load ── */
+  /* ── Cache v5 — clear all old keys ── */
   (function() {
     try {
       var keysToRemove = [];
       for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
-        if (k && k.indexOf("nq_") === 0 && k.indexOf("nq_v5_") !== 0) {
-          keysToRemove.push(k);
-        }
+        if (k && k.indexOf("nq_") === 0 && k.indexOf("nq_v5_") !== 0) keysToRemove.push(k);
       }
       keysToRemove.forEach(function(k) { localStorage.removeItem(k); });
     } catch(e) {}
@@ -111,14 +99,13 @@
       var raw = localStorage.getItem(CACHE_KEY);
       if (!raw) return null;
       var obj = JSON.parse(raw);
-      // 5 minute TTL (300000ms) — keeps view counts fresh
-      if (Date.now() - obj.ts > 86400000) { localStorage.removeItem(CACHE_KEY); return null; } // 24h TTL
+      /* ── 24 HOUR TTL — videos show instantly on refresh ── */
+      if (Date.now() - obj.ts > 86400000) { localStorage.removeItem(CACHE_KEY); return null; }
       return obj.data;
     } catch(e) { return null; }
   }
 
   function writeCache(data) {
-    // Never write empty video arrays to cache — causes blank page on refresh
     if (!data || !data.videos || data.videos.length === 0) return;
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
   }
@@ -130,17 +117,13 @@
   function renderVideos(data) {
     var raw = (data && data.videos) ? data.videos : [];
 
-    // Client-side filter: homepage shows only show_on=home, PDP shows only matching product
     if (!productId) {
-      // Homepage — filter to videos marked for homepage
       allVideos = raw.filter(function(v) {
         var showOn = Array.isArray(v.show_on) ? v.show_on : [];
-        return showOn.includes("home") || showOn.indexOf("home") >= 0;
+        return showOn.indexOf("home") >= 0;
       });
-      // If none marked for homepage, show all live videos as fallback
       if (allVideos.length === 0 && raw.length > 0) allVideos = raw;
     } else {
-      // PDP — filter to videos tagged with this product
       var gid = "gid://shopify/Product/" + productId;
       allVideos = raw.filter(function(v) {
         var ids = Array.isArray(v.product_ids) ? v.product_ids : [];
@@ -148,10 +131,10 @@
       });
     }
 
-    console.log("[NQ " + blockId + "] Rendering", allVideos.length, "of", raw.length, "videos");
     var cont = document.getElementById("nq-carousel-" + blockId);
-    if (!cont) { console.log("[NQ] Container not found!"); return; }
+    if (!cont) return;
     cont.innerHTML = "";
+
     if (!allVideos.length) {
       if (productId) {
         var section = cont.closest(".nq-section");
@@ -161,6 +144,7 @@
       }
       return;
     }
+
     rendered = true;
     allVideos.slice(0, 3).forEach(function(v, i) { cont.appendChild(buildCard(v, i)); });
     if (allVideos.length > 3) {
@@ -179,55 +163,43 @@
     else                                   initScrollBtns();
   }
 
-  // Step 1: instant render from cache
+  /* ── Step 1: render from cache instantly ── */
   var cached = readCache();
   if (cached) {
-    console.log("[NQ " + blockId + "] Cache HIT");
     renderVideos(cached);
-  } else {
-    console.log("[NQ " + blockId + "] Cache MISS — fetching API");
   }
 
-  // Step 2: ALWAYS fetch fresh data (even if cache hit)
-  // This ensures videos always appear — cached first, then updated
+  /* ── Step 2: always fetch fresh in background ── */
   var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
+
+  /* If not rendered in 8s, show refresh link */
   var giveUp = setTimeout(function() {
     if (!rendered) {
-      // Still not rendered after 5s — bust cache and try once more
-      bustCache();
-      doFetch(1);
+      var cont = document.getElementById("nq-carousel-" + blockId);
+      if (cont) cont.innerHTML = "<p class='nq-empty' style='padding:20px'>Slow connection — <a href='javascript:location.reload()' style='color:#333;text-decoration:underline'>tap to refresh</a></p>";
     }
-  }, 5000);
+  }, 8000);
 
   function doFetch(tries) {
-    console.log("[NQ " + blockId + "] Fetching:", apiURL);
     fetch(apiURL)
       .then(function(r) {
-        console.log("[NQ] HTTP:", r.status, "URL:", r.url);
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
       })
       .then(function(data) {
         clearTimeout(giveUp);
-        var count = data && data.videos ? data.videos.length : 0;
-        console.log("[NQ] Got", count, "videos. Error:", data && data.error);
-        if (data && data.error) {
-          console.error("[NQ] API error:", data.error);
-        }
         writeCache(data);
         if (!rendered) {
           renderVideos(data);
         } else {
-          // Already rendered from cache — update with fresh data silently
-          var freshVideos = data.videos || [];
-          if (freshVideos.length > 0) {
-            allVideos = freshVideos;
+          /* Already showing cached — silently update allVideos + view counts */
+          if (data.videos && data.videos.length > 0) {
+            allVideos = data.videos;
             refreshAllViewCounters();
           }
         }
       })
       .catch(function(err) {
-        console.log("[NQ] Fetch error:", String(err), "tries left:", tries - 1);
         if (tries > 1) {
           setTimeout(function() { doFetch(tries - 1); }, 3000);
         } else {
@@ -242,28 +214,23 @@
 
   doFetch(3);
 
-  /* ── Re-render on back/forward navigation (bfcache restore) ── */
+  /* ── Back/forward cache: reload once with anti-loop flag ── */
   window.addEventListener("pageshow", function(e) {
     if (e.persisted) {
-      // bfcache restore: page frozen in memory, JS state lost
-      // Only safe fix is reload — use sessionStorage flag to prevent loop
       try {
-        if (!sessionStorage.getItem("nq_reloading")) {
-          sessionStorage.setItem("nq_reloading", "1");
-          window.location.reload();
+        if (sessionStorage.getItem("nq_bfc_reload")) {
+          sessionStorage.removeItem("nq_bfc_reload");
         } else {
-          sessionStorage.removeItem("nq_reloading");
+          sessionStorage.setItem("nq_bfc_reload", "1");
+          window.location.reload();
         }
-      } catch(e) {
+      } catch(e2) {
         window.location.reload();
       }
     }
   });
 
-  // Clear reload flag on normal page load
-  try { sessionStorage.removeItem("nq_reloading"); } catch(e) {}
-
-  /* ── Re-render when tab becomes visible after being hidden ── */
+  /* ── Tab visible: re-fetch if cards missing ── */
   document.addEventListener("visibilitychange", function() {
     if (document.visibilityState === "visible") {
       var cont = document.getElementById("nq-carousel-" + blockId);
@@ -274,12 +241,10 @@
     }
   });
 
-  /* ── Refresh all view counters on cards after fresh fetch ── */
   function refreshAllViewCounters() {
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (!cont) return;
-    var cards = cont.querySelectorAll(".nq-card");
-    cards.forEach(function(card, i) {
+    cont.querySelectorAll(".nq-card").forEach(function(card, i) {
       if (allVideos[i]) {
         var viewEl = card.querySelector(".nq-views");
         if (viewEl) viewEl.innerHTML = "&#128065; " + (allVideos[i].views || 0);
@@ -287,18 +252,16 @@
     });
   }
 
-  /* ───────────────────────── Card Builder ───────────────────────── */
+  /* ── Card Builder ── */
   function buildCard(video, index) {
     var card = document.createElement("div");
     card.className = "nq-card nq-tile-" + tileType;
 
     var videoEl = document.createElement("video");
-    videoEl.muted       = true;
-    videoEl.loop        = true;
+    videoEl.muted = true;
+    videoEl.loop = true;
     videoEl.playsInline = true;
-    videoEl.className   = "nq-video-el";
-    // Show thumbnail as poster so card never shows black while loading
-    // First 3 cards: preload metadata for instant play; rest: lazy
+    videoEl.className = "nq-video-el";
     if (index < 3) {
       videoEl.preload = "metadata";
       videoEl.src = video.r2_url;
@@ -319,9 +282,7 @@
       (new IntersectionObserver(function(entries, obs) {
         entries.forEach(function(e) {
           if (e.isIntersecting) {
-            if (videoEl.dataset.src && !videoEl.src) {
-              videoEl.src = videoEl.dataset.src;
-            }
+            if (videoEl.dataset.src && !videoEl.src) videoEl.src = videoEl.dataset.src;
             obs.unobserve(e.target);
           }
         });
@@ -333,12 +294,10 @@
     var views = document.createElement("div");
     views.className = "nq-views";
     views.innerHTML = "&#128065; " + (video.views || 0);
-
     card.appendChild(videoEl);
     card.appendChild(views);
 
     switch (tileType) {
-
       case "img_transparent_text_overlay_3":
       case "img_transparent_text_overlay_2":
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
@@ -346,9 +305,7 @@
           if (!p) return;
           var ov = document.createElement("div");
           ov.className = "nq-ov-transparent";
-          ov.innerHTML =
-            (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
-            '<span class="nq-ov-title">' + p.title + '</span>';
+          ov.innerHTML = (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') + '<span class="nq-ov-title">' + p.title + '</span>';
           card.appendChild(ov);
         });
         break;
@@ -359,12 +316,7 @@
           if (!p) return;
           var ov = document.createElement("div");
           ov.className = "nq-ov-opaque";
-          ov.innerHTML =
-            (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
-            '<div class="nq-ov-text">' +
-              '<span class="nq-ov-title">' + p.title + '</span>' +
-              '<span class="nq-ov-price">&#8377;' + fmt(p.price) + '</span>' +
-            '</div>';
+          ov.innerHTML = (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') + '<div class="nq-ov-text"><span class="nq-ov-title">' + p.title + '</span><span class="nq-ov-price">&#8377;' + fmt(p.price) + '</span></div>';
           card.appendChild(ov);
         });
         break;
@@ -382,15 +334,11 @@
           var discHtml = '';
           if (p.compare_at_price && p.compare_at_price > p.price) {
             var pct = Math.round((p.compare_at_price - p.price) / p.compare_at_price * 100);
-            discHtml =
-              '<span class="nq-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>' +
-              '<span class="nq-disc-badge">' + pct + '% off</span>';
+            discHtml = '<span class="nq-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span><span class="nq-disc-badge">' + pct + '% off</span>';
           }
           var info = document.createElement("div");
           info.className = "nq-below-info";
-          info.innerHTML =
-            '<p class="nq-below-title">' + p.title + '</p>' +
-            '<p class="nq-below-price">&#8377;' + fmt(p.price) + ' ' + discHtml + '</p>';
+          info.innerHTML = '<p class="nq-below-title">' + p.title + '</p><p class="nq-below-price">&#8377;' + fmt(p.price) + ' ' + discHtml + '</p>';
           card.appendChild(info);
         });
         break;
@@ -406,9 +354,7 @@
           if (!p) return;
           var ov = document.createElement("div");
           ov.className = "nq-ov-transparent";
-          ov.innerHTML =
-            (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
-            '<span class="nq-ov-title">' + p.title + '</span>';
+          ov.innerHTML = (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') + '<span class="nq-ov-title">' + p.title + '</span>';
           card.appendChild(ov);
         });
         break;
@@ -418,14 +364,10 @@
         getVideoProduct(video).then(function(p) {
           if (!p) return;
           var priceRow = '&#8377;' + fmt(p.price);
-          if (p.compare_at_price && p.compare_at_price > p.price) {
-            priceRow += ' <span class="nq-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
-          }
+          if (p.compare_at_price && p.compare_at_price > p.price) priceRow += ' <span class="nq-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
           var info = document.createElement("div");
           info.className = "nq-below-info";
-          info.innerHTML =
-            '<p class="nq-below-title">' + p.title + '</p>' +
-            '<p class="nq-below-price">' + priceRow + '</p>';
+          info.innerHTML = '<p class="nq-below-title">' + p.title + '</p><p class="nq-below-price">' + priceRow + '</p>';
           card.appendChild(info);
         });
         break;
@@ -444,9 +386,7 @@
           if (!p) return;
           var ov = document.createElement("div");
           ov.className = "nq-ov-transparent";
-          ov.innerHTML =
-            (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') +
-            '<span class="nq-ov-title">' + p.title + '</span>';
+          ov.innerHTML = (p.image ? '<img src="' + p.image + '" class="nq-ov-thumb">' : '') + '<span class="nq-ov-title">' + p.title + '</span>';
           card.appendChild(ov);
         });
         break;
@@ -456,35 +396,32 @@
         card.style.cssText += "width:" + cardW + "px;height:" + cardH + "px;";
         break;
     }
-
     return card;
   }
 
-  /* ───────────────────────── Helpers ───────────────────────── */
+  /* ── Helpers ── */
   function fmt(cents) {
     return (Math.round(parseInt(cents)) / 100).toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 0});
   }
 
   var _productCache = {};
-  var _allProductsCache = null; // bulk cache of all store products
+  var _allProductsCache = null;
 
-  // Pre-fetch all products once and cache them all by ID
   function prefetchAllProducts() {
     if (_allProductsCache) return _allProductsCache;
     _allProductsCache = fetch("/products.json?limit=250")
       .then(function(r) { return r.json(); })
       .then(function(d) {
-        var products = d.products || [];
-        products.forEach(function(p) {
+        (d.products || []).forEach(function(p) {
           var pid = String(p.id);
           var pv = p.variants && p.variants[0];
           if (pv && !_productCache[pid]) {
             _productCache[pid] = {
-              title:            p.title,
-              price:            Math.round(parseFloat(pv.price) * 100),
+              title: p.title,
+              price: Math.round(parseFloat(pv.price) * 100),
               compare_at_price: pv.compare_at_price ? Math.round(parseFloat(pv.compare_at_price) * 100) : null,
-              handle:           p.handle,
-              image:            p.images && p.images[0] ? p.images[0].src : null
+              handle: p.handle,
+              image: p.images && p.images[0] ? p.images[0].src : null
             };
           }
         });
@@ -492,113 +429,76 @@
       }).catch(function() { return {}; });
     return _allProductsCache;
   }
-
-  // Start prefetch immediately (non-blocking — cards render while this loads)
   prefetchAllProducts();
 
   function fetchProduct(productGidOrId) {
     var id = String(productGidOrId).replace("gid://shopify/Product/", "").trim();
     if (!id || id === "undefined") return Promise.resolve(null);
     if (_productCache[id]) return Promise.resolve(_productCache[id]);
-    // Wait for bulk fetch to complete then return exact product
-    return prefetchAllProducts().then(function(cache) {
-      return cache[id] || null;
-    });
+    return prefetchAllProducts().then(function(cache) { return cache[id] || null; });
   }
 
   function getVideoProduct(video) {
-    if (video.product_ids && video.product_ids.length) {
-      return fetchProduct(video.product_ids[0]);
-    }
+    if (video.product_ids && video.product_ids.length) return fetchProduct(video.product_ids[0]);
     if (video.product_handle) {
       return fetch("/products/" + video.product_handle + ".json")
         .then(function(r) { return r.json(); })
         .then(function(d) {
           if (!d.product || !d.product.variants || !d.product.variants[0]) return null;
-          var pr = d.product;
-          var v  = pr.variants[0];
-          return {
-            title:            pr.title,
-            price:            Math.round(parseFloat(v.price) * 100),
-            compare_at_price: v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null,
-            handle:           pr.handle,
-            image:            pr.images && pr.images[0] ? pr.images[0].src : null
-          };
+          var pr = d.product; var v = pr.variants[0];
+          return { title: pr.title, price: Math.round(parseFloat(v.price) * 100), compare_at_price: v.compare_at_price ? Math.round(parseFloat(v.compare_at_price) * 100) : null, handle: pr.handle, image: pr.images && pr.images[0] ? pr.images[0].src : null };
         }).catch(function() { return null; });
     }
     return Promise.resolve(null);
   }
 
-  /* ───────────────────────── Scroll Buttons ─────────────────── */
+  /* ── Scroll Buttons ── */
   function initScrollBtns() {
     var container = document.getElementById("nq-carousel-" + blockId);
     var prev = document.getElementById("nq-prev-" + blockId);
     var next = document.getElementById("nq-next-" + blockId);
-
     function updateArrows() {
       if (prev) prev.disabled = container.scrollLeft <= 2;
       if (next) next.disabled = container.scrollLeft + container.clientWidth >= container.scrollWidth - 2;
     }
-
-    if (prev) prev.onclick = function() {
-      container.scrollBy({ left: -(cardW + 12), behavior: "smooth" });
-      setTimeout(updateArrows, 350);
-    };
-    if (next) next.onclick = function() {
-      container.scrollBy({ left: (cardW + 12), behavior: "smooth" });
-      setTimeout(updateArrows, 350);
-    };
-
+    if (prev) prev.onclick = function() { container.scrollBy({ left: -(cardW + 12), behavior: "smooth" }); setTimeout(updateArrows, 350); };
+    if (next) next.onclick = function() { container.scrollBy({ left: (cardW + 12), behavior: "smooth" }); setTimeout(updateArrows, 350); };
     container.addEventListener("scroll", updateArrows, { passive: true });
     updateArrows();
   }
 
-  /* ───────────────────────── Scroll Reveal ──────────────────── */
+  /* ── Scroll Reveal ── */
   function initScrollReveal(container) {
     var cards = container.querySelectorAll(".nq-scroll-fade");
-    if (!("IntersectionObserver" in window)) {
-      cards.forEach(function(c) { c.classList.add("nq-visible"); });
-      return;
-    }
+    if (!("IntersectionObserver" in window)) { cards.forEach(function(c) { c.classList.add("nq-visible"); }); return; }
     var io = new IntersectionObserver(function(entries) {
-      entries.forEach(function(e) {
-        if (e.isIntersecting) { e.target.classList.add("nq-visible"); io.unobserve(e.target); }
-      });
+      entries.forEach(function(e) { if (e.isIntersecting) { e.target.classList.add("nq-visible"); io.unobserve(e.target); } });
     }, { threshold: 0.12 });
     cards.forEach(function(c) { io.observe(c); });
   }
 
-  /* ───────────────────────── 3D Coverflow ──────────────────── */
+  /* ── 3D Coverflow ── */
   function init3D() {
-    var track   = document.getElementById("nq-carousel-" + blockId);
+    var track = document.getElementById("nq-carousel-" + blockId);
     var prevBtn = document.getElementById("nq-3d-prev-" + blockId);
     var nextBtn = document.getElementById("nq-3d-next-" + blockId);
-    var cards   = track.querySelectorAll(".nq-card");
-    active3D    = Math.floor(cards.length / 2);
-
+    var cards = track.querySelectorAll(".nq-card");
+    active3D = Math.floor(cards.length / 2);
     function render() {
       cards.forEach(function(card, i) {
-        var diff  = i - active3D;
-        var abs   = Math.abs(diff);
+        var diff = i - active3D; var abs = Math.abs(diff);
         var scale = abs === 0 ? 1 : abs === 1 ? 0.80 : 0.65;
-        var tx    = diff * (cardW * 0.68);
-        var tz    = abs === 0 ? 0 : -100;
-        var ry    = diff * -24;
-        var op    = abs === 0 ? 1 : abs === 1 ? 0.65 : 0.40;
-        card.style.cssText +=
-          ";transform:translateX(" + tx + "px) translateZ(" + tz + "px) rotateY(" + ry + "deg) scale(" + scale + ")" +
-          ";opacity:" + op +
-          ";z-index:" + (20 - abs) +
-          ";transition:all 0.4s cubic-bezier(.4,0,.2,1)";
+        var tx = diff * (cardW * 0.68); var tz = abs === 0 ? 0 : -100;
+        var ry = diff * -24; var op = abs === 0 ? 1 : abs === 1 ? 0.65 : 0.40;
+        card.style.cssText += ";transform:translateX(" + tx + "px) translateZ(" + tz + "px) rotateY(" + ry + "deg) scale(" + scale + ");opacity:" + op + ";z-index:" + (20 - abs) + ";transition:all 0.4s cubic-bezier(.4,0,.2,1)";
       });
     }
-
     if (prevBtn) prevBtn.onclick = function() { if (active3D > 0) { active3D--; render(); } };
     if (nextBtn) nextBtn.onclick = function() { if (active3D < cards.length - 1) { active3D++; render(); } };
     render();
   }
 
-  /* ───────────────────────── Popup ─────────────────────────── */
+  /* ── Popup ── */
   var isMuted = true;
   var touchStartY = 0;
   var touchStartX = 0;
@@ -608,46 +508,29 @@
     if (bid !== blockId) return;
     currentIndex = index;
     showPopup(bid);
-
     var popup = document.getElementById("nq-popup-" + bid);
     popup.classList.add("active");
     document.body.style.overflow = "hidden";
-
     if (window.innerWidth <= 768) {
       popup.classList.add("nq-popup-mobile");
       if (!swipeHintShown) {
         swipeHintShown = true;
         var hint = document.getElementById("nq-swipe-hint-" + bid);
-        if (hint) {
-          hint.classList.add("nq-swipe-hint-show");
-          setTimeout(function() { hint.classList.remove("nq-swipe-hint-show"); }, 2200);
-        }
+        if (hint) { hint.classList.add("nq-swipe-hint-show"); setTimeout(function() { hint.classList.remove("nq-swipe-hint-show"); }, 2200); }
       }
     } else {
       popup.classList.remove("nq-popup-mobile");
       var overlay = document.getElementById("nq-popup-overlay-" + bid);
       if (overlay) overlay.onclick = function() { nqClosePopup(bid); };
     }
-
     var wrap = document.getElementById("nq-popup-wrap-" + bid);
     if (wrap && !wrap._nqSwipeInit) {
       wrap._nqSwipeInit = true;
-
-      wrap.addEventListener("touchstart", function(e) {
-        touchStartY = e.touches[0].clientY;
-        touchStartX = e.touches[0].clientX;
-      }, { passive: true });
-
+      wrap.addEventListener("touchstart", function(e) { touchStartY = e.touches[0].clientY; touchStartX = e.touches[0].clientX; }, { passive: true });
       wrap.addEventListener("touchend", function(e) {
         var dy = touchStartY - e.changedTouches[0].clientY;
         var dx = touchStartX - e.changedTouches[0].clientX;
-        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50) {
-          if (dy > 0) {
-            nqNextVideo(bid);
-          } else {
-            nqPrevVideo(bid);
-          }
-        }
+        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50) { if (dy > 0) { nqNextVideo(bid); } else { nqPrevVideo(bid); } }
       }, { passive: true });
     }
   };
@@ -661,30 +544,17 @@
     document.body.style.overflow = "";
   };
 
-  window.nqPrevVideo = function(bid) {
-    if (bid !== blockId) return;
-    currentIndex = (currentIndex - 1 + allVideos.length) % allVideos.length;
-    showPopup(bid);
-  };
-
-  window.nqNextVideo = function(bid) {
-    if (bid !== blockId) return;
-    currentIndex = (currentIndex + 1) % allVideos.length;
-    showPopup(bid);
-  };
-
+  window.nqPrevVideo = function(bid) { if (bid !== blockId) return; currentIndex = (currentIndex - 1 + allVideos.length) % allVideos.length; showPopup(bid); };
+  window.nqNextVideo = function(bid) { if (bid !== blockId) return; currentIndex = (currentIndex + 1) % allVideos.length; showPopup(bid); };
   window.nqToggleMute = function(bid) {
     if (bid !== blockId) return;
     var videoEl = document.getElementById("nq-popup-video-" + bid);
     var muteBtn = document.getElementById("nq-popup-mute-" + bid);
-    isMuted = !isMuted;
-    videoEl.muted = isMuted;
+    isMuted = !isMuted; videoEl.muted = isMuted;
     if (muteBtn) muteBtn.innerHTML = isMuted ? "&#128263;" : "&#128266;";
   };
 
-  /* ── trackView: increment in Supabase + update UI live ── */
   var TRACK = "https://queuniverse-shoppable.vercel.app/api/track";
-
   function trackEvent(eventType, video, value) {
     try {
       var params = "?video_id=" + video.id + "&shop=" + shop + "&event=" + eventType;
@@ -694,130 +564,77 @@
   }
 
   function trackView(video) {
-    // Log view event
     trackEvent("view", video);
-    // Increment locally for instant UI update
     video.views = (video.views || 0) + 1;
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (cont) {
       var cards = cont.querySelectorAll(".nq-card");
       var idx = allVideos.indexOf(video);
-      if (idx >= 0 && cards[idx]) {
-        var viewEl = cards[idx].querySelector(".nq-views");
-        if (viewEl) viewEl.innerHTML = "&#128065; " + video.views;
-      }
+      if (idx >= 0 && cards[idx]) { var viewEl = cards[idx].querySelector(".nq-views"); if (viewEl) viewEl.innerHTML = "&#128065; " + video.views; }
     }
     bustCache();
   }
 
-  // Track watch time — called every 5s while popup video plays
   var _watchInterval = null;
-  function startWatchTracking(video) {
-    stopWatchTracking();
-    _watchInterval = setInterval(function() {
-      trackEvent("watch", video, 5); // 5 seconds watched
-    }, 5000);
-  }
-  function stopWatchTracking() {
-    if (_watchInterval) { clearInterval(_watchInterval); _watchInterval = null; }
-  }
+  function startWatchTracking(video) { stopWatchTracking(); _watchInterval = setInterval(function() { trackEvent("watch", video, 5); }, 5000); }
+  function stopWatchTracking() { if (_watchInterval) { clearInterval(_watchInterval); _watchInterval = null; } }
 
-  // Global click tracker — reads video id from data attributes
   window.nqTrackClick = function(el) {
     try {
       var vid = el.getAttribute("data-video-id");
-      var sh  = el.getAttribute("data-shop");
+      var sh = el.getAttribute("data-shop");
       if (!vid || !sh) return;
-      // Track click event
-      fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + vid + "&shop=" + sh + "&event=click", {
-        method: "GET", keepalive: true
-      }).catch(function(){});
-      // Store in sessionStorage so we can attribute order to this video
-      try {
-        sessionStorage.setItem("nq_last_video", JSON.stringify({ id: vid, shop: sh, ts: Date.now() }));
-      } catch(e) {}
+      fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + vid + "&shop=" + sh + "&event=click", { method: "GET", keepalive: true }).catch(function(){});
+      try { sessionStorage.setItem("nq_last_video", JSON.stringify({ id: vid, shop: sh, ts: Date.now() })); } catch(e) {}
     } catch(e) {}
   };
 
-  // Track order on Shopify thank-you/order-status page
   (function() {
     try {
-      var isThankYou = window.location.pathname.indexOf("/thank_you") >= 0 ||
-                       window.location.pathname.indexOf("/orders/") >= 0 ||
-                       (typeof Shopify !== "undefined" && Shopify.checkout);
+      var isThankYou = window.location.pathname.indexOf("/thank_you") >= 0 || window.location.pathname.indexOf("/orders/") >= 0 || (typeof Shopify !== "undefined" && Shopify.checkout);
       if (!isThankYou) return;
-
       var stored = sessionStorage.getItem("nq_last_video");
       if (!stored) return;
       var last = JSON.parse(stored);
-      // Only attribute if click was within last 30 minutes
       if (Date.now() - last.ts > 30 * 60 * 1000) return;
-
-      // Get order value from Shopify checkout object if available
       var orderValue = 0;
-      if (typeof Shopify !== "undefined" && Shopify.checkout && Shopify.checkout.total_price) {
-        orderValue = parseFloat(Shopify.checkout.total_price);
-      }
-
-      fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + last.id + "&shop=" + last.shop + "&event=order&value=" + orderValue, {
-        method: "GET", keepalive: true
-      }).catch(function(){});
-
-      // Clear so we don't double-count
+      if (typeof Shopify !== "undefined" && Shopify.checkout && Shopify.checkout.total_price) orderValue = parseFloat(Shopify.checkout.total_price);
+      fetch("https://queuniverse-shoppable.vercel.app/api/track?video_id=" + last.id + "&shop=" + last.shop + "&event=order&value=" + orderValue, { method: "GET", keepalive: true }).catch(function(){});
       sessionStorage.removeItem("nq_last_video");
     } catch(e) {}
   })();
 
   function showPopup(bid) {
-    var video   = allVideos[currentIndex];
+    var video = allVideos[currentIndex];
     var videoEl = document.getElementById("nq-popup-video-" + bid);
     videoEl.src = video.r2_url;
     videoEl.play();
     trackView(video);
     startWatchTracking(video);
-
     var pd = document.getElementById("nq-popup-product-" + bid);
     pd.innerHTML = "";
-
     var hasProductIds = video.product_ids && video.product_ids.length;
-    var hasHandle     = video.product_handle && video.product_handle.length;
-
-    console.log("[NQ Popup] video product_ids:", video.product_ids, "| product_handle:", video.product_handle);
-
-    if (hasProductIds || hasHandle) {
-      getVideoProduct(video).then(function(p) {
-        renderPopupProduct(pd, p, video);
-      });
-    } else {
-      console.log("[NQ Popup] No product linked to this video.");
-    }
+    var hasHandle = video.product_handle && video.product_handle.length;
+    if (hasProductIds || hasHandle) { getVideoProduct(video).then(function(p) { renderPopupProduct(pd, p, video); }); }
   }
 
   function renderPopupProduct(pd, p, video) {
-    if (!p) { console.log("[NQ] fetchProduct returned null"); return; }
-    console.log("[NQ] Rendering product:", p.title, p.price, p.handle);
-
-    var priceHtml   = '&#8377;' + fmt(p.price);
+    if (!p) return;
+    var priceHtml = '&#8377;' + fmt(p.price);
     var compareHtml = '';
-    if (p.compare_at_price && p.compare_at_price > p.price) {
-      compareHtml = '<span class="nq-popup-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
-    }
+    if (p.compare_at_price && p.compare_at_price > p.price) compareHtml = '<span class="nq-popup-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
     var videoId = video ? video.id : '';
-
     pd.innerHTML =
       '<div class="nq-popup-product-card">' +
         (p.image ? '<img src="' + p.image + '" class="nq-popup-thumb">' : '') +
-        '<div class="nq-popup-product-info">' +
-          '<p class="nq-popup-product-title">' + p.title + '</p>' +
-          '<p class="nq-popup-product-price">' + priceHtml + ' ' + compareHtml + '</p>' +
-        '</div>' +
+        '<div class="nq-popup-product-info"><p class="nq-popup-product-title">' + p.title + '</p><p class="nq-popup-product-price">' + priceHtml + ' ' + compareHtml + '</p></div>' +
       '</div>' +
       '<a href="/products/' + p.handle + '" class="nq-popup-shop-btn" style="background:' + btnColor + '" data-video-id="' + videoId + '" data-shop="' + shop + '" onclick="nqTrackClick(this)">SHOP NOW</a>';
   }
 })();
 </script>
 
-<!-- NQ Keep-Warm: fires immediately + every 4min to prevent Vercel cold start -->
+<!-- NQ Keep-Warm: prevent Vercel cold start -->
 <script>
 (function() {
   if (window._nqWarmInit) return;
@@ -825,7 +642,6 @@
 
   var API  = "https://queuniverse-shoppable.vercel.app/api/videos";
   var shop = "{{ shop.permanent_domain }}";
-  // Keep-warm pings homepage context — uses correct cache key matching the carousel
   var url  = API + "?shop=" + shop;
   var CACHE_KEY = "nq_v5_" + shop + "_home";
 
@@ -833,26 +649,19 @@
     fetch(url, { keepalive: true })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        // Keep-warm: only update cache if carousel hasn't loaded yet
-        // This prevents overwriting fresher data the carousel already has
         if (data && data.videos && data.videos.length > 0) {
           try {
-            // Always update cache with fresh data from keep-warm
+            /* Always update cache so it's always warm and fresh */
             localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
           } catch(e) {}
         }
       })
-      .catch(function() {
-        setTimeout(ping, 20000);
-      });
+      .catch(function() { setTimeout(ping, 20000); });
   }
 
   ping();
   setInterval(ping, 4 * 60 * 1000);
-
-  document.addEventListener("visibilitychange", function() {
-    if (document.visibilityState === "visible") ping();
-  });
+  document.addEventListener("visibilitychange", function() { if (document.visibilityState === "visible") ping(); });
 })();
 </script>
 
@@ -861,112 +670,36 @@
   "name": "NQ Video Carousel",
   "target": "section",
   "settings": [
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Watch And Buy" },
+    { "type": "range", "id": "heading_size_desktop", "label": "Heading Font Size - Desktop (px)", "min": 20, "max": 80, "step": 2, "default": 40 },
+    { "type": "range", "id": "heading_size_mobile", "label": "Heading Font Size - Mobile (px)", "min": 16, "max": 60, "step": 2, "default": 28 },
+    { "type": "range", "id": "horizontal_padding", "label": "Horizontal Padding (px)", "min": 0, "max": 100, "step": 4, "default": 40 },
+    { "type": "range", "id": "vertical_padding", "label": "Vertical Padding (px)", "min": 0, "max": 100, "step": 4, "default": 20 },
+    { "type": "range", "id": "card_height", "label": "Video Card Height (px)", "min": 200, "max": 600, "step": 20, "default": 340 },
+    { "type": "range", "id": "card_width", "label": "Video Card Width (px)", "min": 120, "max": 400, "step": 10, "default": 200 },
     {
-      "type": "text",
-      "id": "heading",
-      "label": "Heading",
-      "default": "Watch And Buy"
-    },
-    {
-      "type": "range",
-      "id": "heading_size_desktop",
-      "label": "Heading Font Size - Desktop (px)",
-      "min": 20,
-      "max": 80,
-      "step": 2,
-      "default": 40
-    },
-    {
-      "type": "range",
-      "id": "heading_size_mobile",
-      "label": "Heading Font Size - Mobile (px)",
-      "min": 16,
-      "max": 60,
-      "step": 2,
-      "default": 28
-    },
-    {
-      "type": "range",
-      "id": "horizontal_padding",
-      "label": "Horizontal Padding (px)",
-      "min": 0,
-      "max": 100,
-      "step": 4,
-      "default": 40
-    },
-    {
-      "type": "range",
-      "id": "vertical_padding",
-      "label": "Vertical Padding (px)",
-      "min": 0,
-      "max": 100,
-      "step": 4,
-      "default": 20
-    },
-    {
-      "type": "range",
-      "id": "card_height",
-      "label": "Video Card Height (px)",
-      "min": 200,
-      "max": 600,
-      "step": 20,
-      "default": 340
-    },
-    {
-      "type": "range",
-      "id": "card_width",
-      "label": "Video Card Width (px)",
-      "min": 120,
-      "max": 400,
-      "step": 10,
-      "default": 200
-    },
-    {
-      "type": "select",
-      "id": "tile_type",
-      "label": "Tile Type",
-      "info": "'2 tiles' and '3 tiles' refer to the layout in mobile view",
+      "type": "select", "id": "tile_type", "label": "Tile Type",
       "options": [
         { "value": "img_transparent_text_overlay_3", "label": "Video Card-Img & Transparent Text Overlay-3 tiles" },
         { "value": "img_transparent_text_overlay_2", "label": "Video Card-Img & Transparent Text Overlay-2 tiles" },
-        { "value": "img_opaque_text_overlay_3",      "label": "Video Card-Img & Opaque Text Overlay-3 tiles" },
-        { "value": "single_tile_no_overlay",          "label": "Video Card-Single Tile (No Overlay)" },
-        { "value": "product_below_3",                 "label": "Video Card-Product Info Below tile-3 tiles" },
-        { "value": "product_below_2",                 "label": "Video Card-Product Info Below tile-2 tiles" },
-        { "value": "story_format",                    "label": "Video Card-Story Like Format" },
-        { "value": "feed_view_more",                  "label": "Video Card Feed-View More" },
-        { "value": "feed_on_scroll",                  "label": "Video Card Feed-On Scroll" },
-        { "value": "grid_theme_border",               "label": "Video Card Grid-Theme Border" },
-        { "value": "grid_no_border",                  "label": "Video Card Grid-No Border" },
-        { "value": "3d_navigation",                   "label": "Video Card 3D Navigation" },
-        { "value": "minimal",                         "label": "Video Card Minimal" }
+        { "value": "img_opaque_text_overlay_3", "label": "Video Card-Img & Opaque Text Overlay-3 tiles" },
+        { "value": "single_tile_no_overlay", "label": "Video Card-Single Tile (No Overlay)" },
+        { "value": "product_below_3", "label": "Video Card-Product Info Below tile-3 tiles" },
+        { "value": "product_below_2", "label": "Video Card-Product Info Below tile-2 tiles" },
+        { "value": "story_format", "label": "Video Card-Story Like Format" },
+        { "value": "feed_view_more", "label": "Video Card Feed-View More" },
+        { "value": "feed_on_scroll", "label": "Video Card Feed-On Scroll" },
+        { "value": "grid_theme_border", "label": "Video Card Grid-Theme Border" },
+        { "value": "grid_no_border", "label": "Video Card Grid-No Border" },
+        { "value": "3d_navigation", "label": "Video Card 3D Navigation" },
+        { "value": "minimal", "label": "Video Card Minimal" }
       ],
       "default": "product_below_3"
     },
-    {
-      "type": "color",
-      "id": "heading_color",
-      "label": "Heading Color",
-      "default": "#000000"
-    },
-    {
-      "type": "color",
-      "id": "shop_btn_color",
-      "label": "Shop Now Button Color",
-      "default": "#000000"
-    },
-    {
-      "type": "checkbox",
-      "id": "autoplay",
-      "label": "Autoplay on hover",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_views",
-      "label": "Show view count",
-      "default": true
-    }
+    { "type": "color", "id": "heading_color", "label": "Heading Color", "default": "#000000" },
+    { "type": "color", "id": "shop_btn_color", "label": "Shop Now Button Color", "default": "#000000" },
+    { "type": "checkbox", "id": "autoplay", "label": "Autoplay on hover", "default": true },
+    { "type": "checkbox", "id": "show_views", "label": "Show view count", "default": true }
   ]
 }
 {% endschema %}
