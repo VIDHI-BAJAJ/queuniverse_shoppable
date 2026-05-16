@@ -654,17 +654,13 @@
   /* ── Analytics ── */
   var TRACK = "https://queuniverse-shoppable.vercel.app/api/track";
 
+  /* trackEvent: same GET pattern as view tracking (which works).
+     Returns a Promise so click handler can await it before navigating. */
   function trackEvent(type, video, value) {
     try {
       var url = TRACK + "?video_id=" + video.id + "&shop=" + shop + "&event=" + type + (value ? "&value=" + value : "");
-      /* sendBeacon is guaranteed to complete even after page navigation — perfect for click events.
-         Falls back to keepalive fetch if sendBeacon is unavailable. */
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(url);
-      } else {
-        fetch(url, { method: "GET", keepalive: true }).catch(function(){});
-      }
-    } catch(e) {}
+      return fetch(url, { method: "GET", keepalive: true }).catch(function(){});
+    } catch(e) { return Promise.resolve(); }
   }
   function trackView(video) {
     trackEvent("view", video);
@@ -697,18 +693,20 @@
   }
 
   function stopWatchTracking() {
+    var p = Promise.resolve();
     if (_watchInterval) {
       clearInterval(_watchInterval);
       _watchInterval = null;
-      /* Flush the partial window since the last tick */
+      /* Flush the partial seconds since the last 5-s tick */
       if (_watchVideo && _watchLastTick) {
         var partial = Math.floor((Date.now() - _watchLastTick) / 1000);
-        if (partial > 0) { trackEvent("watch", _watchVideo, partial); }
+        if (partial > 0) { p = trackEvent("watch", _watchVideo, partial) || Promise.resolve(); }
       }
     }
     _watchVideo     = null;
     _watchStartTime = null;
     _watchLastTick  = null;
+    return p;
   }
 
   window.nqTrackClick = function(el) {
@@ -790,20 +788,32 @@
 
     shopBtn.addEventListener("click", function(e) {
       e.preventDefault();
-      /* 1. Flush remaining watch time — stopWatchTracking calls trackEvent internally */
+      if (shopBtn._nqClicking) return; // prevent double-fire
+      shopBtn._nqClicking = true;
+
+      /* 1. Flush remaining watch seconds for this video */
       stopWatchTracking();
+
+      /* 2. Fire click event — same GET fetch that view tracking uses (proven to work) */
+      var clickPromise;
       try {
-        /* 2. Track the click — sendBeacon is guaranteed even after navigation */
-        var clickUrl = TRACK + "?video_id=" + videoId + "&shop=" + shop + "&event=click";
-        if (navigator.sendBeacon) {
-          navigator.sendBeacon(clickUrl);
-        } else {
-          fetch(clickUrl, { method: "GET", keepalive: true }).catch(function(){});
-        }
         sessionStorage.setItem("nq_last_video", JSON.stringify({ id: videoId, shop: shop, ts: Date.now() }));
-      } catch(err) {}
-      /* 3. Navigate — both beacon requests will complete in background */
-      window.location.href = "/products/" + p.handle;
+        clickPromise = trackEvent("click", video);
+      } catch(err) {
+        clickPromise = Promise.resolve();
+      }
+
+      /* 3. Wait up to 500ms for the click request to complete, then navigate.
+            500ms is enough for a fast connection; keepalive ensures it even if we navigate early. */
+      var handle = p.handle;
+      var done = false;
+      function go() {
+        if (done) return;
+        done = true;
+        window.location.href = "/products/" + handle;
+      }
+      clickPromise.then(go).catch(go);
+      setTimeout(go, 500);
     });
 
     pd.appendChild(shopBtn);

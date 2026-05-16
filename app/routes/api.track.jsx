@@ -7,7 +7,6 @@ const HEADERS = {
 
 import { supabase } from "../supabase.server.js";
 
-/* ── Shared handler for both GET and POST ── */
 async function handleTrack(request) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: HEADERS });
@@ -24,7 +23,7 @@ async function handleTrack(request) {
       return new Response(JSON.stringify({ ok: false, error: "Missing params" }), { headers: HEADERS });
     }
 
-    // 1. Increment counters on videos table for view and click events
+    // 1. Increment counters on videos table
     if (event === "view" || event === "click") {
       const col = event === "view" ? "views" : "buy_now_clicks";
       const { data } = await supabase
@@ -35,6 +34,7 @@ async function handleTrack(request) {
         .single();
 
       if (data) {
+        // For click: only update if buy_now_clicks column exists
         if (event === "view" || data[col] !== undefined) {
           await supabase
             .from("videos")
@@ -45,7 +45,7 @@ async function handleTrack(request) {
       }
     }
 
-    // 2. Log event to video_events table
+    // 2. Always log to video_events — this is what the dashboard reads
     const { error: insertError } = await supabase
       .from("video_events")
       .insert({
@@ -57,6 +57,7 @@ async function handleTrack(request) {
 
     if (insertError) {
       console.error("video_events insert error:", insertError.message);
+      // Return ok=true so the client doesn't retry — views.views already incremented
       return new Response(JSON.stringify({ ok: true, warning: insertError.message }), { headers: HEADERS });
     }
 
@@ -66,8 +67,8 @@ async function handleTrack(request) {
   }
 }
 
-/* GET — normal view/watch events */
+/* GET — all tracking events (view, watch, click) */
 export const loader = async ({ request }) => handleTrack(request);
 
-/* POST — sendBeacon click and watch-flush events (sendBeacon always POSTs) */
+/* POST — fallback for sendBeacon if ever used */
 export const action = async ({ request }) => handleTrack(request);
