@@ -86,7 +86,12 @@ export default function Index() {
     // All from videos table (actual source of truth)
     const displayViews  = data.totalViews;
     const totalClicks   = data.totalClicks;
-    const watchHours    = ((data.totalWatchSec || 0) / 3600).toFixed(1);
+    const totalSec = data.totalWatchSec || 0;
+    const watchHours = totalSec >= 3600
+      ? (totalSec / 3600).toFixed(1) + " hrs"
+      : totalSec >= 60
+        ? Math.floor(totalSec / 60) + " min"
+        : Math.round(totalSec) + " sec";
 
     // Orders from video_events
     const orders   = filteredOrders.length;
@@ -102,7 +107,7 @@ export default function Index() {
     { label: "Total Views",    value: fmtNum(metrics.displayViews),  sub: "Cumulative" },
     { label: "Buy Now Clicks", value: fmtNum(metrics.totalClicks),   sub: "Shop Now tag" },
     { label: "Total Orders",   value: fmtNum(metrics.orders),        sub: "From videos" },
-    { label: "Watch Time",     value: metrics.watchHours + " hrs",   sub: "Total watched" },
+    { label: "Watch Time",     value: metrics.watchHours,             sub: "Total watched" },
   ];
 
   const engagement = [
