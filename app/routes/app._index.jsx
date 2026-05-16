@@ -8,32 +8,33 @@ export const loader = async ({ request }) => {
   const shop = session.shop;
 
   try {
-    // Read from videos table — this is where clicks and views are actually stored
     const { data: videos } = await supabase
       .from("videos")
-      .select("id, status, views, buy_now_clicks, created_at, product_ids")
+      .select("id, status, views, buy_now_clicks, watch_seconds, created_at, product_ids")
       .eq("shop_id", shop);
 
-    // Also read video_events for watch time and orders (if they exist)
+    // video_events for orders only
     const { data: events } = await supabase
       .from("video_events")
       .select("*")
       .eq("shop_id", shop)
+      .eq("event_type", "order")
       .order("created_at", { ascending: true });
 
     const total        = videos?.length || 0;
     const live         = videos?.filter(v => v.status === "live").length || 0;
     const totalViews   = videos?.reduce((sum, v) => sum + (v.views || 0), 0) || 0;
     const totalClicks  = videos?.reduce((sum, v) => sum + (v.buy_now_clicks || 0), 0) || 0;
+    const totalWatchSec= videos?.reduce((sum, v) => sum + (v.watch_seconds || 0), 0) || 0;
 
     return {
-      total, live, totalViews, totalClicks,
+      total, live, totalViews, totalClicks, totalWatchSec,
       videos: videos || [],
-      events: events || [],
+      orderEvents: events || [],
     };
   } catch (e) {
     console.error("Dashboard loader error:", e);
-    return { total: 0, live: 0, totalViews: 0, totalClicks: 0, videos: [], events: [] };
+    return { total: 0, live: 0, totalViews: 0, totalClicks: 0, totalWatchSec: 0, videos: [], orderEvents: [] };
   }
 };
 
@@ -55,17 +56,14 @@ export default function Index() {
   const data     = useLoaderData();
   const navigate = useNavigate();
 
-  const [activeRange, setActiveRange] = useState(1); // default: Last 30 days
+  const [activeRange, setActiveRange] = useState(1);
   const [customFrom, setCustomFrom]   = useState("");
   const [customTo,   setCustomTo]     = useState("");
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  // ── Compute date window ──────────────────────────────────────
   const { fromDate, toDate } = useMemo(() => {
-    if (customFrom && customTo) {
-      return { fromDate: customFrom, toDate: customTo };
-    }
+    if (customFrom && customTo) return { fromDate: customFrom, toDate: customTo };
     const days = RANGES[activeRange].days;
     if (!days) return { fromDate: null, toDate: null };
     const from = new Date();
@@ -73,55 +71,38 @@ export default function Index() {
     return { fromDate: from.toISOString().slice(0, 10), toDate: todayStr };
   }, [activeRange, customFrom, customTo, todayStr]);
 
-  // ── Filter videos by date window (for date-range scoped stats) ──
-  const filteredVideos = useMemo(() => {
-    return (data.videos || []).filter(v => {
-      if (!v.created_at) return true; // include if no date
-      const day = v.created_at.slice(0, 10);
-      if (fromDate && day < fromDate) return false;
-      if (toDate   && day > toDate)   return false;
-      return true;
-    });
-  }, [data.videos, fromDate, toDate]);
-
-  // ── Filter events by date window (for watch time & orders) ──
-  const filteredEvents = useMemo(() => {
-    return (data.events || []).filter(e => {
+  // Filter order events by date range
+  const filteredOrders = useMemo(() => {
+    return (data.orderEvents || []).filter(e => {
       if (!e.created_at) return false;
       const day = e.created_at.slice(0, 10);
       if (fromDate && day < fromDate) return false;
       if (toDate   && day > toDate)   return false;
       return true;
     });
-  }, [data.events, fromDate, toDate]);
+  }, [data.orderEvents, fromDate, toDate]);
 
-  // ── Compute all metrics ──────────────────────────────────────
   const metrics = useMemo(() => {
-    // Views and clicks come from videos table (where they're actually stored)
-    const displayViews  = data.totalViews;   // total across all time from videos table
-    const totalClicks   = data.totalClicks;  // total across all time from videos table
+    // All from videos table (actual source of truth)
+    const displayViews  = data.totalViews;
+    const totalClicks   = data.totalClicks;
+    const watchHours    = ((data.totalWatchSec || 0) / 3600).toFixed(1);
 
-    // Watch time and orders come from video_events (if populated)
-    const watchSec   = filteredEvents.filter(e => e.event_type === "watch")
-                         .reduce((s, e) => s + (e.value || 0), 0);
-    const orders     = filteredEvents.filter(e => e.event_type === "order").length;
-    const revenue    = filteredEvents.filter(e => e.event_type === "order")
-                         .reduce((s, e) => s + (e.value || 0), 0);
-
-    const watchHours     = (watchSec / 3600).toFixed(1);
+    // Orders from video_events
+    const orders   = filteredOrders.length;
+    const revenue  = filteredOrders.reduce((s, e) => s + (e.value || 0), 0);
     const avgOrderValue  = orders > 0 ? revenue / orders : 0;
     const conversionRate = displayViews > 0 ? ((orders / displayViews) * 100).toFixed(2) : "0.00";
 
-    return { displayViews, totalClicks, watchSec, watchHours, orders, revenue, avgOrderValue, conversionRate };
-  }, [data.totalViews, data.totalClicks, filteredEvents]);
+    return { displayViews, totalClicks, watchHours, orders, revenue, avgOrderValue, conversionRate };
+  }, [data.totalViews, data.totalClicks, data.totalWatchSec, filteredOrders]);
 
-  // ── Stats cards ──────────────────────────────────────────────
   const stats = [
-    { label: "Total Videos",   value: fmtNum(data.total),              sub: `${data.live} live` },
-    { label: "Total Views",    value: fmtNum(metrics.displayViews),    sub: "Cumulative" },
-    { label: "Buy Now Clicks", value: fmtNum(metrics.totalClicks),     sub: "Shop Now tag" },
-    { label: "Total Orders",   value: fmtNum(metrics.orders),          sub: "From videos" },
-    { label: "Watch Time",     value: metrics.watchHours + " hrs",     sub: "Total watched" },
+    { label: "Total Videos",   value: fmtNum(data.total),            sub: `${data.live} live` },
+    { label: "Total Views",    value: fmtNum(metrics.displayViews),  sub: "Cumulative" },
+    { label: "Buy Now Clicks", value: fmtNum(metrics.totalClicks),   sub: "Shop Now tag" },
+    { label: "Total Orders",   value: fmtNum(metrics.orders),        sub: "From videos" },
+    { label: "Watch Time",     value: metrics.watchHours + " hrs",   sub: "Total watched" },
   ];
 
   const engagement = [
@@ -133,7 +114,6 @@ export default function Index() {
     { label: "Video Conversion Rate",  value: metrics.conversionRate + "%" },
   ];
 
-  // ── Styles ───────────────────────────────────────────────────
   const s = {
     page:      { padding: "28px 32px", fontFamily: "'Inter', system-ui, sans-serif", minHeight: "100vh" },
     header:    { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "28px" },
@@ -158,7 +138,6 @@ export default function Index() {
 
   return (
     <div style={s.page}>
-      {/* Header */}
       <div style={s.header}>
         <h1 style={s.title}>NQ-Shoppable Dashboard</h1>
         <button style={s.manageBtn} onClick={() => navigate("/app/videos")}>
@@ -166,32 +145,21 @@ export default function Index() {
         </button>
       </div>
 
-      {/* Date Range Selector */}
       <div style={s.rangeWrap}>
         <span style={s.rangeLabel}>RANGE</span>
         {RANGES.map((r, i) => (
-          <button
-            key={r.label}
-            style={s.rangeBtn(activeRange === i && !customFrom)}
-            onClick={() => { setActiveRange(i); setCustomFrom(""); setCustomTo(""); }}
-          >
+          <button key={r.label} style={s.rangeBtn(activeRange === i && !customFrom)}
+            onClick={() => { setActiveRange(i); setCustomFrom(""); setCustomTo(""); }}>
             {r.label}
           </button>
         ))}
-        <input
-          type="date" style={s.dateInput}
-          value={customFrom} max={todayStr}
-          onChange={e => { setCustomFrom(e.target.value); setCustomTo(""); }}
-        />
+        <input type="date" style={s.dateInput} value={customFrom} max={todayStr}
+          onChange={e => { setCustomFrom(e.target.value); setCustomTo(""); }} />
         <span style={s.dateSep}>→</span>
-        <input
-          type="date" style={s.dateInput}
-          value={customTo} min={customFrom} max={todayStr}
-          onChange={e => setCustomTo(e.target.value)}
-        />
+        <input type="date" style={s.dateInput} value={customTo} min={customFrom} max={todayStr}
+          onChange={e => setCustomTo(e.target.value)} />
       </div>
 
-      {/* Top Stats */}
       <div style={s.statsRow}>
         {stats.map(st => (
           <div key={st.label} style={s.statCard}>
@@ -202,7 +170,6 @@ export default function Index() {
         ))}
       </div>
 
-      {/* Engagement */}
       <div style={s.engTitle}>Engagement Overview</div>
       <div style={s.engGrid}>
         {engagement.map(e => (
