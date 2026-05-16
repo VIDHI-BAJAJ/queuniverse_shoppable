@@ -1,8 +1,6 @@
 {{ 'nq-carousel.css' | asset_url | stylesheet_tag }}
 <link rel="preconnect" href="https://queuniverse-shoppable.vercel.app" crossorigin>
 <link rel="dns-prefetch" href="https://queuniverse-shoppable.vercel.app">
-<!-- Wake Vercel immediately — fires as HTML parses, before JS runs -->
-<link rel="prefetch" href="https://queuniverse-shoppable.vercel.app/api/videos?shop={{ shop.permanent_domain }}" as="fetch" crossorigin>
 
 <div class="nq-section nq-tile-type-{{ block.settings.tile_type }}"
      style="padding: {{ block.settings.vertical_padding }}px {{ block.settings.horizontal_padding }}px;">
@@ -114,7 +112,7 @@
       if (!raw) return null;
       var obj = JSON.parse(raw);
       // 5 minute TTL (300000ms) — keeps view counts fresh
-      if (Date.now() - obj.ts > 86400000) { localStorage.removeItem(CACHE_KEY); return null; } // 24h TTL
+      if (Date.now() - obj.ts > 60000) { localStorage.removeItem(CACHE_KEY); return null; } // 60s TTL
       return obj.data;
     } catch(e) { return null; }
   }
@@ -190,14 +188,14 @@
     console.log("[NQ " + blockId + "] Cache MISS — fetching API");
   }
 
-  // Step 2: ALWAYS fetch fresh data (even if cache hit)
-  // This ensures videos always appear — cached first, then updated
+  // Step 2: fetch fresh data
   var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
   var giveUp = setTimeout(function() {
     if (!rendered) {
-      doFetch(1);
+      var cont = document.getElementById("nq-carousel-" + blockId);
+      if (cont) cont.innerHTML = "<p class='nq-empty' style='padding:20px'>Slow connection — <a href='javascript:location.reload()' style='color:#333;text-decoration:underline'>tap to refresh</a></p>";
     }
-  }, 5000);
+  }, 15000);
 
   function doFetch(tries) {
     console.log("[NQ " + blockId + "] Fetching:", apiURL);
@@ -218,18 +216,14 @@
         if (!rendered) {
           renderVideos(data);
         } else {
-          // Already rendered from cache — update with fresh data silently
-          var freshVideos = data.videos || [];
-          if (freshVideos.length > 0) {
-            allVideos = freshVideos;
-            refreshAllViewCounters();
-          }
+          allVideos = data.videos || [];
+          refreshAllViewCounters();
         }
       })
       .catch(function(err) {
         console.log("[NQ] Fetch error:", String(err), "tries left:", tries - 1);
         if (tries > 1) {
-          setTimeout(function() { doFetch(tries - 1); }, 1000);
+          setTimeout(function() { doFetch(tries - 1); }, 3000);
         } else {
           clearTimeout(giveUp);
           if (!rendered) {
@@ -245,23 +239,10 @@
   /* ── Re-render on back/forward navigation (bfcache restore) ── */
   window.addEventListener("pageshow", function(e) {
     if (e.persisted) {
-      // bfcache restore: page frozen in memory, JS state lost
-      // Only safe fix is reload — use sessionStorage flag to prevent loop
-      try {
-        if (!sessionStorage.getItem("nq_reloading")) {
-          sessionStorage.setItem("nq_reloading", "1");
-          window.location.reload();
-        } else {
-          sessionStorage.removeItem("nq_reloading");
-        }
-      } catch(e) {
-        window.location.reload();
-      }
+      // bfcache restore — force a clean reload so carousel re-initializes
+      window.location.reload();
     }
   });
-
-  // Clear reload flag on normal page load
-  try { sessionStorage.removeItem("nq_reloading"); } catch(e) {}
 
   /* ── Re-render when tab becomes visible after being hidden ── */
   document.addEventListener("visibilitychange", function() {
@@ -269,6 +250,7 @@
       var cont = document.getElementById("nq-carousel-" + blockId);
       if (cont && cont.querySelectorAll(".nq-card").length === 0) {
         rendered = false;
+        bustCache();
         doFetch(3);
       }
     }
@@ -707,20 +689,7 @@
         if (viewEl) viewEl.innerHTML = "&#128065; " + video.views;
       }
     }
-    // Update cache with new view count instead of busting it
-    // This keeps cache valid so back-navigation shows videos instantly
-    try {
-      var cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        var obj = JSON.parse(cached);
-        if (obj && obj.data && obj.data.videos) {
-          obj.data.videos = obj.data.videos.map(function(v) {
-            return v.id === video.id ? Object.assign({}, v, { views: video.views }) : v;
-          });
-          localStorage.setItem(CACHE_KEY, JSON.stringify(obj));
-        }
-      }
-    } catch(e) {}
+    bustCache();
   }
 
   // Track watch time — called every 5s while popup video plays
@@ -850,8 +819,10 @@
         // This prevents overwriting fresher data the carousel already has
         if (data && data.videos && data.videos.length > 0) {
           try {
-            // Always update cache with fresh data from keep-warm
-            localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+            var existing = localStorage.getItem(CACHE_KEY);
+            if (!existing) {
+              localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+            }
           } catch(e) {}
         }
       })
