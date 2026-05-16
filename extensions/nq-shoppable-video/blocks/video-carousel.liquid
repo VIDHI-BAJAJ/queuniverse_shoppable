@@ -237,14 +237,16 @@
   doFetch(3);
 
   /* ── Re-render on back/forward navigation (bfcache restore) ── */
+  // Mark page as visited so back navigation can detect it
+  try { sessionStorage.setItem("nq_visited", "1"); } catch(e) {}
+
   window.addEventListener("pageshow", function(e) {
     if (e.persisted) {
-      // bfcache restore — re-render carousel without full page reload
+      // bfcache restore — re-render carousel
       var cont = document.getElementById("nq-carousel-" + blockId);
       if (cont) {
         rendered = false;
         cont.innerHTML = "";
-        bustCache();
         doFetch(3);
       }
     }
@@ -256,7 +258,6 @@
       var cont = document.getElementById("nq-carousel-" + blockId);
       if (cont && cont.querySelectorAll(".nq-card").length === 0) {
         rendered = false;
-        bustCache();
         doFetch(3);
       }
     }
