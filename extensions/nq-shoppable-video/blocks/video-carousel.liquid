@@ -111,8 +111,8 @@
       var raw = localStorage.getItem(CACHE_KEY);
       if (!raw) return null;
       var obj = JSON.parse(raw);
-      // 5 minute TTL (300000ms) — keeps view counts fresh
-      if (Date.now() - obj.ts > 60000) { localStorage.removeItem(CACHE_KEY); return null; } // 60s TTL
+      // 30 second TTL — prevents stale blank cache on navigation return
+      if (Date.now() - obj.ts > 30000) { localStorage.removeItem(CACHE_KEY); return null; }
       return obj.data;
     } catch(e) { return null; }
   }
@@ -125,6 +125,12 @@
 
   function bustCache() {
     try { localStorage.removeItem(CACHE_KEY); } catch(e) {}
+  }
+
+  function resetContainer() {
+    var cont = document.getElementById("nq-carousel-" + blockId);
+    if (cont) cont.innerHTML = '<div class="nq-loading">Loading videos...</div>';
+    rendered = false;
   }
 
   function renderVideos(data) {
@@ -151,7 +157,11 @@
     console.log("[NQ " + blockId + "] Rendering", allVideos.length, "of", raw.length, "videos");
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (!cont) { console.log("[NQ] Container not found!"); return; }
+
+    // Reset rendered flag BEFORE clearing — prevents race conditions
+    rendered = false;
     cont.innerHTML = "";
+
     if (!allVideos.length) {
       if (productId) {
         var section = cont.closest(".nq-section");
@@ -161,14 +171,16 @@
       }
       return;
     }
-    rendered = true;
+
     allVideos.slice(0, 3).forEach(function(v, i) { cont.appendChild(buildCard(v, i)); });
     if (allVideos.length > 3) {
       requestAnimationFrame(function() {
         allVideos.slice(3).forEach(function(v, i) { cont.appendChild(buildCard(v, i + 3)); });
+        rendered = true;
         finishSetup(cont);
       });
     } else {
+      rendered = true;
       finishSetup(cont);
     }
   }
@@ -239,8 +251,11 @@
   /* ── Re-render on back/forward navigation (bfcache restore) ── */
   window.addEventListener("pageshow", function(e) {
     if (e.persisted) {
-      // bfcache restore — force a clean reload so carousel re-initializes
-      window.location.reload();
+      // bfcache restore — reset state and re-fetch without a full page reload
+      console.log("[NQ] bfcache restore detected — re-fetching");
+      resetContainer();
+      bustCache();
+      doFetch(3);
     }
   });
 
@@ -248,8 +263,11 @@
   document.addEventListener("visibilitychange", function() {
     if (document.visibilityState === "visible") {
       var cont = document.getElementById("nq-carousel-" + blockId);
-      if (cont && cont.querySelectorAll(".nq-card").length === 0) {
-        rendered = false;
+      // Check for actual rendered cards (not skeletons or loading state)
+      var hasRealCards = cont && cont.querySelectorAll(".nq-card").length > 0;
+      if (!hasRealCards) {
+        console.log("[NQ] visibilitychange — no real cards found, re-fetching");
+        resetContainer();
         bustCache();
         doFetch(3);
       }
