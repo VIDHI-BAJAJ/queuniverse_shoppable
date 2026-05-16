@@ -7,7 +7,8 @@ const HEADERS = {
 
 import { supabase } from "../supabase.server.js";
 
-export const loader = async ({ request }) => {
+/* ── Shared handler for both GET and POST ── */
+async function handleTrack(request) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: HEADERS });
   }
@@ -23,7 +24,7 @@ export const loader = async ({ request }) => {
       return new Response(JSON.stringify({ ok: false, error: "Missing params" }), { headers: HEADERS });
     }
 
-    // 1. Increment counters on videos table
+    // 1. Increment counters on videos table for view and click events
     if (event === "view" || event === "click") {
       const col = event === "view" ? "views" : "buy_now_clicks";
       const { data } = await supabase
@@ -34,7 +35,6 @@ export const loader = async ({ request }) => {
         .single();
 
       if (data) {
-        // Only update click counter if the column exists in the DB
         if (event === "view" || data[col] !== undefined) {
           await supabase
             .from("videos")
@@ -56,7 +56,6 @@ export const loader = async ({ request }) => {
       });
 
     if (insertError) {
-      // Table might not exist — return ok anyway so views still increment
       console.error("video_events insert error:", insertError.message);
       return new Response(JSON.stringify({ ok: true, warning: insertError.message }), { headers: HEADERS });
     }
@@ -65,4 +64,10 @@ export const loader = async ({ request }) => {
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: e.message }), { headers: HEADERS });
   }
-};
+}
+
+/* GET — normal view/watch events */
+export const loader = async ({ request }) => handleTrack(request);
+
+/* POST — sendBeacon click and watch-flush events (sendBeacon always POSTs) */
+export const action = async ({ request }) => handleTrack(request);

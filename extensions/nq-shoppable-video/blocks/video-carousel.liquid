@@ -653,10 +653,17 @@
 
   /* ── Analytics ── */
   var TRACK = "https://queuniverse-shoppable.vercel.app/api/track";
+
   function trackEvent(type, video, value) {
     try {
-      var p = "?video_id=" + video.id + "&shop=" + shop + "&event=" + type + (value ? "&value=" + value : "");
-      fetch(TRACK + p, { method: "GET", keepalive: true }).catch(function(){});
+      var url = TRACK + "?video_id=" + video.id + "&shop=" + shop + "&event=" + type + (value ? "&value=" + value : "");
+      /* sendBeacon is guaranteed to complete even after page navigation — perfect for click events.
+         Falls back to keepalive fetch if sendBeacon is unavailable. */
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(url);
+      } else {
+        fetch(url, { method: "GET", keepalive: true }).catch(function(){});
+      }
     } catch(e) {}
   }
   function trackView(video) {
@@ -783,16 +790,19 @@
 
     shopBtn.addEventListener("click", function(e) {
       e.preventDefault();
-      /* Flush remaining watch time BEFORE navigating away */
+      /* 1. Flush remaining watch time — stopWatchTracking calls trackEvent internally */
       stopWatchTracking();
       try {
-        /* keepalive=true keeps the request alive through page navigation */
-        fetch(TRACK + "?video_id=" + videoId + "&shop=" + shop + "&event=click", {
-          method: "GET", keepalive: true
-        }).catch(function(){});
+        /* 2. Track the click — sendBeacon is guaranteed even after navigation */
+        var clickUrl = TRACK + "?video_id=" + videoId + "&shop=" + shop + "&event=click";
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(clickUrl);
+        } else {
+          fetch(clickUrl, { method: "GET", keepalive: true }).catch(function(){});
+        }
         sessionStorage.setItem("nq_last_video", JSON.stringify({ id: videoId, shop: shop, ts: Date.now() }));
       } catch(err) {}
-      /* Navigate immediately after firing — keepalive ensures delivery */
+      /* 3. Navigate — both beacon requests will complete in background */
       window.location.href = "/products/" + p.handle;
     });
 
