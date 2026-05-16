@@ -138,13 +138,14 @@
 
     // Client-side filter: homepage shows only show_on=home, PDP shows only matching product
     if (!productId) {
-      // Homepage — filter to videos marked for homepage
-      allVideos = raw.filter(function(v) {
-        var showOn = Array.isArray(v.show_on) ? v.show_on : [];
-        return showOn.includes("home") || showOn.indexOf("home") >= 0;
+      // Homepage — try to filter to home-tagged videos, but ALWAYS fallback to all videos
+      var homeFiltered = raw.filter(function(v) {
+        var showOn = Array.isArray(v.show_on) ? v.show_on : (v.show_on ? [String(v.show_on)] : []);
+        return showOn.indexOf("home") >= 0;
       });
-      // If none marked for homepage, show all live videos as fallback
-      if (allVideos.length === 0 && raw.length > 0) allVideos = raw;
+      // Never leave homepage blank — if filter returns nothing, show everything
+      allVideos = homeFiltered.length > 0 ? homeFiltered : raw;
+      console.log("[NQ] home-filtered:", homeFiltered.length, "→ showing:", allVideos.length);
     } else {
       // PDP — filter to videos tagged with this product
       var gid = "gid://shopify/Product/" + productId;
@@ -207,7 +208,7 @@
       var cont = document.getElementById("nq-carousel-" + blockId);
       if (cont) cont.innerHTML = "<p class='nq-empty' style='padding:20px'>Slow connection — <a href='javascript:location.reload()' style='color:#333;text-decoration:underline'>tap to refresh</a></p>";
     }
-  }, 15000);
+  }, 8000);
 
   function doFetch(tries) {
     console.log("[NQ " + blockId + "] Fetching:", apiURL);
@@ -880,14 +881,10 @@
     fetch(url, { keepalive: true })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        // Keep-warm: only update cache if carousel hasn't loaded yet
-        // This prevents overwriting fresher data the carousel already has
+        // Keep-warm: always update cache with fresh data so next page load is instant
         if (data && data.videos && data.videos.length > 0) {
           try {
-            var existing = localStorage.getItem(CACHE_KEY);
-            if (!existing) {
-              localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
-            }
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
           } catch(e) {}
         }
       })
