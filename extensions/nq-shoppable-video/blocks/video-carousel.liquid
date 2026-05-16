@@ -111,8 +111,8 @@
       var raw = localStorage.getItem(CACHE_KEY);
       if (!raw) return null;
       var obj = JSON.parse(raw);
-      // 30 second TTL — prevents stale blank cache on navigation return
-      if (Date.now() - obj.ts > 30000) { localStorage.removeItem(CACHE_KEY); return null; }
+      // 5 minute TTL — long enough to survive fast back navigation, short enough to stay fresh
+      if (Date.now() - obj.ts > 300000) { localStorage.removeItem(CACHE_KEY); return null; }
       return obj.data;
     } catch(e) { return null; }
   }
@@ -251,11 +251,40 @@
   /* ── Re-render on back/forward navigation (bfcache restore) ── */
   window.addEventListener("pageshow", function(e) {
     if (e.persisted) {
-      // bfcache restore — reset state and re-fetch without a full page reload
-      console.log("[NQ] bfcache restore detected — re-fetching");
-      resetContainer();
-      bustCache();
-      doFetch(3);
+      console.log("[NQ] bfcache restore detected");
+      var cont = document.getElementById("nq-carousel-" + blockId);
+      var hasRealCards = cont && cont.querySelectorAll(".nq-card").length > 0;
+
+      if (hasRealCards) {
+        // Cards already visible in bfcache snapshot — just refresh in background silently
+        console.log("[NQ] Cards already present — background refresh only");
+        fetch(apiURL)
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            writeCache(data);
+            allVideos = data.videos || [];
+            refreshAllViewCounters();
+          }).catch(function(){});
+        return;
+      }
+
+      // No cards visible — try cache first for instant render, then fetch
+      var cached = readCache();
+      if (cached) {
+        console.log("[NQ] bfcache restore — rendering from cache instantly");
+        rendered = false;
+        renderVideos(cached);
+        // Background refresh to update view counts
+        fetch(apiURL)
+          .then(function(r) { return r.json(); })
+          .then(function(data) { writeCache(data); allVideos = data.videos || []; refreshAllViewCounters(); })
+          .catch(function(){});
+      } else {
+        // No cache — show loading and fetch
+        console.log("[NQ] bfcache restore — no cache, fetching");
+        resetContainer();
+        doFetch(3);
+      }
     }
   });
 
@@ -263,12 +292,30 @@
   document.addEventListener("visibilitychange", function() {
     if (document.visibilityState === "visible") {
       var cont = document.getElementById("nq-carousel-" + blockId);
-      // Check for actual rendered cards (not skeletons or loading state)
       var hasRealCards = cont && cont.querySelectorAll(".nq-card").length > 0;
-      if (!hasRealCards) {
-        console.log("[NQ] visibilitychange — no real cards found, re-fetching");
+
+      if (hasRealCards) {
+        // Cards visible — background refresh only, don't disrupt the user
+        fetch(apiURL)
+          .then(function(r) { return r.json(); })
+          .then(function(data) { writeCache(data); allVideos = data.videos || []; refreshAllViewCounters(); })
+          .catch(function(){});
+        return;
+      }
+
+      // No cards — try cache for instant render first
+      console.log("[NQ] visibilitychange — no real cards found");
+      var cached = readCache();
+      if (cached) {
+        console.log("[NQ] visibilitychange — rendering from cache");
+        rendered = false;
+        renderVideos(cached);
+        fetch(apiURL)
+          .then(function(r) { return r.json(); })
+          .then(function(data) { writeCache(data); allVideos = data.videos || []; refreshAllViewCounters(); })
+          .catch(function(){});
+      } else {
         resetContainer();
-        bustCache();
         doFetch(3);
       }
     }
