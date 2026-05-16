@@ -95,7 +95,7 @@
       var keysToRemove = [];
       for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
-        if (k && k.indexOf("nq_") === 0 && k.indexOf("nq_v5_") !== 0) {
+        if (k && k.indexOf("nq_") === 0 && k.indexOf("nq_v6_") !== 0) {
           keysToRemove.push(k);
         }
       }
@@ -103,7 +103,7 @@
     } catch(e) {}
   })();
 
-  var CACHE_KEY = "nq_v5_" + shop + (productId ? "_pdp_" + productId : "_home");
+  var CACHE_KEY = "nq_v6_" + shop + (productId ? "_pdp_" + productId : "_home");
   var rendered  = false;
 
   function readCache() {
@@ -150,7 +150,7 @@
       });
     }
 
-    console.log("[NQ " + blockId + "] Rendering", allVideos.length, "of", raw.length, "videos");
+    console.log("[NQ " + blockId + "] Rendering", allVideos.length, "of", raw.length, "videos | tileType:", tileType, "| productId:", productId);
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (!cont) { console.log("[NQ] Container not found!"); return; }
 
@@ -187,23 +187,26 @@
     else                                   initScrollBtns();
   }
 
-  // Step 1: instant render from cache
+  // Step 1: instant render from cache if available
   var cached = readCache();
   if (cached) {
-    console.log("[NQ " + blockId + "] Cache HIT");
+    console.log("[NQ " + blockId + "] Cache HIT — rendering instantly");
     renderVideos(cached);
   } else {
-    console.log("[NQ " + blockId + "] Cache MISS — fetching API");
+    console.log("[NQ " + blockId + "] Cache MISS — showing skeletons, fetching API");
   }
 
-  // Step 2: fetch fresh data
+  // Step 2: always fetch fresh data from API
   var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
+  console.log("[NQ] API URL:", apiURL);
+
   var giveUp = setTimeout(function() {
     if (!rendered) {
+      console.warn("[NQ] Timeout — API took too long");
       var cont = document.getElementById("nq-carousel-" + blockId);
       if (cont) cont.innerHTML = "<p class='nq-empty' style='padding:20px'>Slow connection — <a href='javascript:location.reload()' style='color:#333;text-decoration:underline'>tap to refresh</a></p>";
     }
-  }, 8000);
+  }, 10000);
 
   function doFetch(tries) {
     console.log("[NQ " + blockId + "] Fetching:", apiURL);
@@ -231,7 +234,7 @@
       .catch(function(err) {
         console.log("[NQ] Fetch error:", String(err), "tries left:", tries - 1);
         if (tries > 1) {
-          setTimeout(function() { doFetch(tries - 1); }, 3000);
+          setTimeout(function() { doFetch(tries - 1); }, 1000);
         } else {
           clearTimeout(giveUp);
           if (!rendered) {
@@ -870,7 +873,7 @@
   var shop = "{{ shop.permanent_domain }}";
   // Keep-warm pings homepage context — uses correct cache key matching the carousel
   var url  = API + "?shop=" + shop;
-  var CACHE_KEY = "nq_v5_" + shop + "_home";
+  var CACHE_KEY = "nq_v6_" + shop + "_home";
 
   function ping() {
     fetch(url, { keepalive: true })
