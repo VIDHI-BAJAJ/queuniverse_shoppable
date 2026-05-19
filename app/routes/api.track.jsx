@@ -40,6 +40,7 @@ async function handleTrack(request) {
 
       if (event === "click") {
         updateObj.buy_now_clicks = (video.buy_now_clicks || 0) + 1;
+        updateObj.last_click_at  = new Date().toISOString(); // for order attribution
       }
 
       if (event === "watch" && value > 0) {
