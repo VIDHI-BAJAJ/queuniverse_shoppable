@@ -6,16 +6,24 @@ application_url = "https://queuniverse-shoppable.vercel.app"
 embedded = true
 
 [access_scopes]
-scopes = "read_files,write_files,read_product_listings,write_product_listings,read_products,write_products,read_script_tags,write_script_tags,read_themes,write_themes"
+scopes = "read_files,write_files,read_product_listings,write_product_listings,read_products,write_products,read_script_tags,write_script_tags,read_themes,write_themes,read_orders"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [webhooks]
 api_version = "2026-04"
 
- [[webhooks.subscriptions]]
-uri = "/webhooks/orders/paid"
-topics = [ "orders/paid" ]
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/paid"
+  topics = [ "orders/paid" ]
 
 [auth]
 redirect_urls = [
