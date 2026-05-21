@@ -9,3 +9,6 @@ runtime_context = "strict"
   preferences = false
   marketing = false
   sale_of_data = "disabled"
+
+[settings]
+  type = "object"
