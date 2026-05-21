@@ -5,7 +5,7 @@ handle = "nq-order-pixel"
 runtime_context = "strict"
 
 [customer_privacy]
-  analytics = "disabled"
-  preferences = "disabled"
-  marketing = "disabled"
-  sale_of_data = "disabled"
+  analytics = false
+  preferences = false
+  marketing = false
+  sale_of_data = false
