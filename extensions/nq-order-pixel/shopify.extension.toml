@@ -3,4 +3,9 @@ type = "web_pixel_extension"
 handle = "nq-order-pixel"
 
 runtime_context = "strict"
-customer_privacy = { analytics = false, preferences = false, marketing = false, sale_of_data = false }
+
+[customer_privacy]
+  analytics = "disabled"
+  preferences = "disabled"
+  marketing = "disabled"
+  sale_of_data = "disabled"
