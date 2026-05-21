@@ -12,3 +12,8 @@ runtime_context = "strict"
 
 [settings]
   type = "object"
+
+  [settings.fields.shopDomain]
+  name = "Shop Domain"
+  description = "The shop domain for attribution"
+  type = "single_line_text_field"
