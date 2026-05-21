@@ -771,20 +771,64 @@
     } catch(e) {}
   };
 
-  /* Order attribution */
+  /* ── Save video click to localStorage (survives checkout domain hop) ── */
+  /* Called when user clicks Shop Now / Buy Now button */
+  window.nqSaveClickForAttribution = function(videoId, shopDomain) {
+    try {
+      localStorage.setItem("nq_last_click", JSON.stringify({
+        id:   videoId,
+        shop: shopDomain,
+        ts:   Date.now()
+      }));
+    } catch(e) {}
+  };
+
+  /* ── Order attribution on thank-you / order-status page ── */
+  /* Shopify renders the widget on /thank_you and /orders/* pages too.
+     We read localStorage (works across checkout.shopify.com redirect)
+     and fire the order event with the real order total from Shopify globals. */
   (function() {
     try {
-      var isThankYou = window.location.pathname.indexOf("/thank_you") >= 0 ||
-                       window.location.pathname.indexOf("/orders/") >= 0 ||
-                       (typeof Shopify !== "undefined" && Shopify.checkout);
-      if (!isThankYou) return;
-      var stored = sessionStorage.getItem("nq_last_video");
+      var path = window.location.pathname;
+      var isOrderPage = path.indexOf("/thank_you") >= 0 ||
+                        path.indexOf("/orders/")   >= 0;
+      /* Also fires on pages where Shopify.Checkout object is present */
+      var hasCheckout = typeof Shopify !== "undefined" &&
+                        typeof Shopify.checkout !== "undefined";
+      if (!isOrderPage && !hasCheckout) return;
+
+      /* Read from localStorage — survives checkout domain change */
+      var stored = null;
+      try { stored = localStorage.getItem("nq_last_click"); } catch(e) {}
       if (!stored) return;
+
       var last = JSON.parse(stored);
-      if (Date.now() - last.ts > 30 * 60 * 1000) return;
-      var orderValue = (typeof Shopify !== "undefined" && Shopify.checkout && Shopify.checkout.total_price) ? parseFloat(Shopify.checkout.total_price) : 0;
-      fetch(TRACK + "?video_id=" + last.id + "&shop=" + last.shop + "&event=order&value=" + orderValue, { method: "GET", keepalive: true }).catch(function(){});
-      sessionStorage.removeItem("nq_last_video");
+      /* 60-minute attribution window */
+      if (Date.now() - last.ts > 60 * 60 * 1000) {
+        try { localStorage.removeItem("nq_last_click"); } catch(e) {}
+        return;
+      }
+
+      /* Get real order value — try multiple Shopify globals */
+      var orderValue = 0;
+      try {
+        if (window.Shopify && Shopify.checkout && Shopify.checkout.total_price) {
+          /* total_price is in cents on some versions */
+          var raw = parseFloat(Shopify.checkout.total_price);
+          orderValue = raw > 1000 ? raw / 100 : raw;
+        } else if (window.ShopifyAnalytics && ShopifyAnalytics.meta && ShopifyAnalytics.meta.checkout) {
+          orderValue = parseFloat(ShopifyAnalytics.meta.checkout.total_price || 0);
+        }
+      } catch(e) {}
+
+      fetch(TRACK + "?video_id=" + encodeURIComponent(last.id) +
+                   "&shop="     + encodeURIComponent(last.shop) +
+                   "&event=order" +
+                   "&value="    + orderValue,
+            { method: "GET", keepalive: true }).catch(function(){});
+
+      /* Clear so same order isn't double-counted */
+      try { localStorage.removeItem("nq_last_click"); } catch(e) {}
     } catch(e) {}
   })();
 
@@ -875,11 +919,10 @@
       /* 2. Fire click event — same GET fetch that view tracking uses (proven to work) */
       var clickPromise;
       try {
-        var nqPayload = JSON.stringify({ id: videoId, shop: shop, ts: Date.now() });
-        sessionStorage.setItem("nq_last_video", nqPayload);
-        /* Also backup to localStorage — Gokwik redirects to external domain
-           which wipes sessionStorage. Web pixel restores it on return. */
-        localStorage.setItem("nq_last_video_backup", nqPayload);
+        /* Save to localStorage so it survives checkout domain hop (checkout.shopify.com) */
+        nqSaveClickForAttribution(videoId, shop);
+        /* Also keep sessionStorage for same-domain fallback */
+        try { sessionStorage.setItem("nq_last_video", JSON.stringify({ id: videoId, shop: shop, ts: Date.now() })); } catch(e2) {}
         clickPromise = trackEvent("click", video);
       } catch(err) {
         clickPromise = Promise.resolve();
