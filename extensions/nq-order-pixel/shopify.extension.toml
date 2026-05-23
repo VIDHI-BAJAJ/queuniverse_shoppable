@@ -3,6 +3,7 @@ type = "web_pixel_extension"
 handle = "nq-order-pixel"
 
 runtime_context = "strict"
+uid = "450a0307-4441-a337-6a62-608d74894622aad231c9"
 
 [customer_privacy]
   analytics = false
