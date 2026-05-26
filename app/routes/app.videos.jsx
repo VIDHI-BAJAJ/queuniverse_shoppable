@@ -246,67 +246,41 @@ export default function Videos() {
   const [urlUploadProgress, setUrlUploadProgress] = useState(0);
   const [urlUploadError, setUrlUploadError] = useState(null);
 
-  const handleUrlUpload = async (e) => {
-    e.preventDefault();
-    if (!urlValue) return;
-    setIsUrlUploading(true);
-    setUrlUploadError(null);
+ // Replace the entire handleUrlUpload function in app.videos.jsx with this:
+
+const handleUrlUpload = async (e) => {
+  e.preventDefault();
+  if (!urlValue) return;
+  setIsUrlUploading(true);
+  setUrlUploadError(null);
+  setUrlUploadProgress(10);
+
+  try {
+    const titleVal = e.target.querySelector("[name=title]")?.value || "Untitled Video";
+
+    // Send URL to server — server fetches + uploads to R2 (avoids browser CORS)
+    setUrlUploadProgress(20);
+    const fd = new FormData();
+    fd.set("type", "url_import");
+    fd.set("source_url", urlValue);
+    fd.set("title", titleVal);
+
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    setUrlUploadProgress(100);
+    setShowImport(false);
+    setUrlValue("");
     setUrlUploadProgress(0);
-    try {
-      const titleVal = e.target.querySelector("[name=title]")?.value || "Untitled Video";
-      const presignForm = new FormData();
-      presignForm.set("type", "presign");
-      presignForm.set("ext", "mp4");
-      presignForm.set("content_type", "video/mp4");
-      presignForm.set("title", titleVal);
-      const presignRes = await fetch("/api/upload", { method: "POST", body: presignForm });
-      const { videoUrl, thumbUrl, key, thumbKey, error: presignErr } = await presignRes.json();
-      if (presignErr) throw new Error(presignErr);
-      setUrlUploadProgress(10);
-      const videoRes = await fetch(urlValue);
-      if (!videoRes.ok) throw new Error("Could not fetch video: " + videoRes.status);
-      const videoBlob = await videoRes.blob();
-      setUrlUploadProgress(40);
-      await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", videoUrl);
-        xhr.setRequestHeader("Content-Type", "video/mp4");
-        xhr.upload.onprogress = (ev) => {
-          if (ev.lengthComputable) setUrlUploadProgress(40 + Math.round((ev.loaded / ev.total) * 50));
-        };
-        xhr.onload = () => xhr.status < 300 ? resolve() : reject(new Error("Upload failed: " + xhr.status));
-        xhr.onerror = () => reject(new Error("Network error"));
-        xhr.send(videoBlob);
-      });
-      setUrlUploadProgress(92);
-      let hasThumb = false;
-      const thumbFile = thumbnailInputRef.current?.files?.[0];
-      if (thumbFile) {
-        await fetch(thumbUrl, { method: "PUT", headers: { "Content-Type": "image/jpeg" }, body: thumbFile });
-        hasThumb = true;
-      }
-      setUrlUploadProgress(97);
-      const confirmForm = new FormData();
-      confirmForm.set("type", "confirm");
-      confirmForm.set("key", key);
-      confirmForm.set("thumb_key", thumbKey);
-      confirmForm.set("has_thumb", hasThumb ? "true" : "false");
-      confirmForm.set("title", titleVal);
-      confirmForm.set("shop", new URLSearchParams(window.location.search).get("shop") || "");
-      const confirmRes = await fetch("/api/upload", { method: "POST", body: confirmForm });
-      const { error: confirmErr } = await confirmRes.json();
-      if (confirmErr) throw new Error(confirmErr);
-      setUrlUploadProgress(100);
-      setShowImport(false);
-      setUrlValue("");
-      setUrlUploadProgress(0);
-      window.location.reload();
-    } catch (err) {
-      setUrlUploadError(err.message);
-    } finally {
-      setIsUrlUploading(false);
-    }
-  };
+    window.location.reload();
+
+  } catch (err) {
+    setUrlUploadError(err.message);
+  } finally {
+    setIsUrlUploading(false);
+  }
+};
 
   // fetcher drives both import forms — state tracks in-flight, data has result
   const isImporting = fetcher.state !== "idle";

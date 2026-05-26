@@ -28,27 +28,23 @@ export const action = async ({ request }) => {
     const { session } = await authenticate.admin(request);
     const shop = session.shop;
 
-    // ── Parse body: support both FormData and JSON ──
+    // Parse body: support both FormData and JSON
     const ct = request.headers.get("content-type") || "";
     let fields = {};
-
     if (ct.includes("application/json")) {
       fields = await request.json();
     } else {
-      // FormData
       const fd = await request.formData();
-      for (const [k, v] of fd.entries()) {
-        fields[k] = v;
-      }
+      for (const [k, v] of fd.entries()) fields[k] = v;
     }
 
     const type = (fields.type || "").trim();
-    console.log("[api.upload] type =", type, "| fields =", Object.keys(fields));
+    console.log("[api.upload] type =", type);
 
-    // ── PRESIGN: generate signed PUT URLs so browser uploads directly to R2 ──
+    // ── PRESIGN: generate signed PUT URLs for browser → R2 direct upload ──
     if (type === "presign") {
-      const ext = (fields.ext || fields.fileName?.split(".").pop() || "mp4").replace(/[^a-z0-9]/gi, "");
-      const contentType = fields.content_type || fields.contentType || "video/mp4";
+      const ext = (fields.ext || "mp4").replace(/[^a-z0-9]/gi, "");
+      const contentType = fields.content_type || "video/mp4";
       const videoKey = `videos/${uuidv4()}.${ext}`;
       const thumbKey = `thumbnails/${uuidv4()}.jpg`;
       const s3 = getS3();
@@ -67,48 +63,76 @@ export const action = async ({ request }) => {
       ]);
 
       return new Response(JSON.stringify({
-        ok: true,
-        videoUrl,
-        thumbUrl,
-        key: videoKey,
-        thumbKey,
+        ok: true, videoUrl, thumbUrl, key: videoKey, thumbKey,
       }), { headers: HEADERS });
     }
 
-    // ── CONFIRM: video is already in R2 — just save metadata to Supabase ──
+    // ── CONFIRM: save metadata after browser has uploaded to R2 ──
     if (type === "confirm") {
       const key = fields.key;
       const thumbKey = fields.thumb_key;
       const hasThumb = fields.has_thumb === "true" || fields.has_thumb === true;
       const title = fields.title || "Untitled Video";
-
-      if (!key) {
-        return new Response(JSON.stringify({ error: "Missing key" }), { status: 400, headers: HEADERS });
-      }
-
-      const r2Url = `${process.env.R2_PUBLIC_URL}/${key}`;
-      const thumbnailUrl = hasThumb && thumbKey ? `${process.env.R2_PUBLIC_URL}/${thumbKey}` : null;
+      if (!key) return new Response(JSON.stringify({ error: "Missing key" }), { status: 400, headers: HEADERS });
 
       const { error } = await supabase.from("videos").insert({
         shop_id: shop,
         title,
-        r2_url: r2Url,
+        r2_url: `${process.env.R2_PUBLIC_URL}/${key}`,
         r2_key: key,
         status: "draft",
         views: 0,
         product_ids: [],
         show_on: [],
-        thumbnail_url: thumbnailUrl,
+        thumbnail_url: hasThumb && thumbKey ? `${process.env.R2_PUBLIC_URL}/${thumbKey}` : null,
       });
-
       if (error) throw error;
       return new Response(JSON.stringify({ ok: true }), { headers: HEADERS });
     }
 
-    // ── Fallback: log exactly what we received to help debug ──
-    console.error("[api.upload] Unhandled type:", type, "fields:", fields);
+    // ── URL-IMPORT: server fetches the video and uploads to R2 ──
+    // Used instead of browser fetch (avoids CORS issues with Shopify CDN etc.)
+    if (type === "url_import") {
+      const sourceUrl = fields.source_url;
+      const title = fields.title || "Untitled Video";
+      if (!sourceUrl) return new Response(JSON.stringify({ error: "Missing source_url" }), { status: 400, headers: HEADERS });
+
+      // Fetch video server-side (no CORS restriction)
+      const videoRes = await fetch(sourceUrl, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+      });
+      if (!videoRes.ok) throw new Error(`Failed to fetch video: ${videoRes.status} ${videoRes.statusText}`);
+
+      const buffer = Buffer.from(await videoRes.arrayBuffer());
+      const key = `videos/${uuidv4()}.mp4`;
+      const s3 = getS3();
+
+      await s3.send(new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: key,
+        Body: buffer,
+        ContentType: "video/mp4",
+      }));
+
+      const { error } = await supabase.from("videos").insert({
+        shop_id: shop,
+        title,
+        r2_url: `${process.env.R2_PUBLIC_URL}/${key}`,
+        r2_key: key,
+        source_url: sourceUrl,
+        status: "draft",
+        views: 0,
+        product_ids: [],
+        show_on: [],
+        thumbnail_url: null,
+      });
+      if (error) throw error;
+      return new Response(JSON.stringify({ ok: true }), { headers: HEADERS });
+    }
+
+    console.error("[api.upload] Unknown type:", type, "keys:", Object.keys(fields));
     return new Response(
-      JSON.stringify({ error: `Unknown type: "${type}". Received keys: ${Object.keys(fields).join(", ")}` }),
+      JSON.stringify({ error: `Unknown type: "${type}"` }),
       { status: 400, headers: HEADERS }
     );
 
