@@ -5,7 +5,8 @@ import { createReadableStreamFromReadable } from "@react-router/node";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
 
-export const streamTimeout = 5000;
+// Increased from 5 s → 5 min so large video uploads aren't aborted mid-stream
+export const streamTimeout = 5 * 60 * 1000;
 
 export default async function handleRequest(
   request,
