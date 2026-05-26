@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v4 as uuidv4 } from "uuid";
 
 const getS3 = () => new S3Client({
@@ -16,84 +17,103 @@ const HEADERS = {
 };
 
 export const action = async ({ request }) => {
+  const { authenticate } = await import("../shopify.server.js");
+  const { supabase } = await import("../supabase.server.js");
+
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: HEADERS });
   }
 
   try {
-    // Use authenticate.admin to get the real shop from session
-    const { authenticate } = await import("../shopify.server.js");
-    let shop = "";
-    try {
-      const { session } = await authenticate.admin(request);
-      shop = session.shop;
-    } catch(e) {
-      // fallback: read from form data
+    const { session } = await authenticate.admin(request);
+    const shop = session.shop;
+
+    // ── Parse body: support both FormData and JSON ──
+    const ct = request.headers.get("content-type") || "";
+    let fields = {};
+
+    if (ct.includes("application/json")) {
+      fields = await request.json();
+    } else {
+      // FormData
+      const fd = await request.formData();
+      for (const [k, v] of fd.entries()) {
+        fields[k] = v;
+      }
     }
 
-    const formData = await request.formData();
-    const type = formData.get("type");
-    const title = formData.get("title") || "Untitled Video";
-    
-    // Use shop from session, fallback to form data
-    if (!shop) shop = formData.get("shop") || "";
+    const type = (fields.type || "").trim();
+    console.log("[api.upload] type =", type, "| fields =", Object.keys(fields));
 
-    // ── PRESIGN ──
+    // ── PRESIGN: generate signed PUT URLs so browser uploads directly to R2 ──
     if (type === "presign") {
-      const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-      const ext = formData.get("ext") || "mp4";
-      const contentType = formData.get("content_type") || "video/mp4";
-      const key = `videos/${uuidv4()}.${ext}`;
+      const ext = (fields.ext || fields.fileName?.split(".").pop() || "mp4").replace(/[^a-z0-9]/gi, "");
+      const contentType = fields.content_type || fields.contentType || "video/mp4";
+      const videoKey = `videos/${uuidv4()}.${ext}`;
       const thumbKey = `thumbnails/${uuidv4()}.jpg`;
+      const s3 = getS3();
 
-      const videoUrl = await getSignedUrl(
-        getS3(),
-        new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
-        { expiresIn: 3600 }
-      );
-      const thumbUrl = await getSignedUrl(
-        getS3(),
-        new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: thumbKey, ContentType: "image/jpeg" }),
-        { expiresIn: 3600 }
-      );
+      const [videoUrl, thumbUrl] = await Promise.all([
+        getSignedUrl(s3, new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: videoKey,
+          ContentType: contentType,
+        }), { expiresIn: 3600 }),
+        getSignedUrl(s3, new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: thumbKey,
+          ContentType: "image/jpeg",
+        }), { expiresIn: 3600 }),
+      ]);
 
-      // Return shop in presign response so confirm step can use it
-      return new Response(JSON.stringify({ videoUrl, thumbUrl, key, thumbKey, shop }), { headers: HEADERS });
+      return new Response(JSON.stringify({
+        ok: true,
+        videoUrl,
+        thumbUrl,
+        key: videoKey,
+        thumbKey,
+      }), { headers: HEADERS });
     }
 
-    // ── CONFIRM ──
+    // ── CONFIRM: video is already in R2 — just save metadata to Supabase ──
     if (type === "confirm") {
-      const { createClient } = await import("@supabase/supabase-js");
-      const supabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-      );
+      const key = fields.key;
+      const thumbKey = fields.thumb_key;
+      const hasThumb = fields.has_thumb === "true" || fields.has_thumb === true;
+      const title = fields.title || "Untitled Video";
 
-      const key = formData.get("key");
-      const thumbKey = formData.get("thumb_key");
-      const hasThumb = formData.get("has_thumb") === "true";
+      if (!key) {
+        return new Response(JSON.stringify({ error: "Missing key" }), { status: 400, headers: HEADERS });
+      }
+
       const r2Url = `${process.env.R2_PUBLIC_URL}/${key}`;
-      const thumbnailUrl = hasThumb ? `${process.env.R2_PUBLIC_URL}/${thumbKey}` : null;
-
-      console.log("Confirm upload - shop:", shop, "key:", key);
+      const thumbnailUrl = hasThumb && thumbKey ? `${process.env.R2_PUBLIC_URL}/${thumbKey}` : null;
 
       const { error } = await supabase.from("videos").insert({
-        shop_id: shop, title, r2_url: r2Url, r2_key: key,
-        status: "draft", views: 0, product_ids: [], show_on: [],
+        shop_id: shop,
+        title,
+        r2_url: r2Url,
+        r2_key: key,
+        status: "draft",
+        views: 0,
+        product_ids: [],
+        show_on: [],
         thumbnail_url: thumbnailUrl,
       });
 
-      if (error) {
-        console.error("Supabase error:", error);
-        return new Response(JSON.stringify({ error: `${error.message} (code:${error.code})` }), { headers: HEADERS });
-      }
-
-      return new Response(JSON.stringify({ ok: true, shop }), { headers: HEADERS });
+      if (error) throw error;
+      return new Response(JSON.stringify({ ok: true }), { headers: HEADERS });
     }
 
-    return new Response(JSON.stringify({ error: "Unknown type" }), { headers: HEADERS });
+    // ── Fallback: log exactly what we received to help debug ──
+    console.error("[api.upload] Unhandled type:", type, "fields:", fields);
+    return new Response(
+      JSON.stringify({ error: `Unknown type: "${type}". Received keys: ${Object.keys(fields).join(", ")}` }),
+      { status: 400, headers: HEADERS }
+    );
+
   } catch (e) {
-    console.error("Upload error:", e);
-    return new Response(JSON.stringify({ error: e.message }), { headers: HEADERS });
+    console.error("[api.upload] Error:", e);
+    return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: HEADERS });
   }
 };
