@@ -1,6 +1,9 @@
-import { useLoaderData, Form, Link, redirect } from "react-router";
+import { useLoaderData, Form, Link, redirect, useRouteError } from "react-router";
 import { authenticate } from "../shopify.server";
-import { supabase } from "../supabase.server";
+import { boundary } from "@shopify/shopify-app-react-router/server";
+import { createClient } from "@supabase/supabase-js";
+const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabase = getSupabase();
 
 export const loader = async ({ request, params }) => {
   const { session, admin } = await authenticate.admin(request);
@@ -122,3 +125,11 @@ export default function EditVideo() {
     </div>
   );
 }
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};

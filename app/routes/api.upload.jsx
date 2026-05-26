@@ -16,80 +16,84 @@ const HEADERS = {
 };
 
 export const action = async ({ request }) => {
-  const { authenticate } = await import("../shopify.server.js");
-  const { supabase } = await import("../supabase.server.js");
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: HEADERS });
   }
 
   try {
-    const { session } = await authenticate.admin(request);
-    const shop = session.shop;
+    // Use authenticate.admin to get the real shop from session
+    const { authenticate } = await import("../shopify.server.js");
+    let shop = "";
+    try {
+      const { session } = await authenticate.admin(request);
+      shop = session.shop;
+    } catch(e) {
+      // fallback: read from form data
+    }
+
     const formData = await request.formData();
-    const type = formData.get("type"); // "url" | "file" | "thumbnail"
+    const type = formData.get("type");
     const title = formData.get("title") || "Untitled Video";
+    
+    // Use shop from session, fallback to form data
+    if (!shop) shop = formData.get("shop") || "";
 
-    let buffer, contentType, key, r2Url;
+    // ── PRESIGN ──
+    if (type === "presign") {
+      const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+      const ext = formData.get("ext") || "mp4";
+      const contentType = formData.get("content_type") || "video/mp4";
+      const key = `videos/${uuidv4()}.${ext}`;
+      const thumbKey = `thumbnails/${uuidv4()}.jpg`;
 
-    if (type === "url") {
-      const sourceUrl = formData.get("source_url");
-      if (!sourceUrl) return new Response(JSON.stringify({ error: "No URL" }), { headers: HEADERS });
-      const res = await fetch(sourceUrl);
-      if (!res.ok) throw new Error("Failed to fetch: " + res.status);
-      buffer = Buffer.from(await res.arrayBuffer());
-      contentType = "video/mp4";
-      key = `videos/${uuidv4()}.mp4`;
-      await getS3().send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, Body: buffer, ContentType: contentType }));
-      r2Url = `${process.env.R2_PUBLIC_URL}/${key}`;
+      const videoUrl = await getSignedUrl(
+        getS3(),
+        new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, ContentType: contentType }),
+        { expiresIn: 3600 }
+      );
+      const thumbUrl = await getSignedUrl(
+        getS3(),
+        new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: thumbKey, ContentType: "image/jpeg" }),
+        { expiresIn: 3600 }
+      );
 
-      let thumbnailUrl = null;
-      const thumb = formData.get("thumbnail");
-      if (thumb && thumb.size > 0) {
-        const tb = Buffer.from(await thumb.arrayBuffer());
-        const tk = `thumbnails/${uuidv4()}.jpg`;
-        await getS3().send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: tk, Body: tb, ContentType: "image/jpeg" }));
-        thumbnailUrl = `${process.env.R2_PUBLIC_URL}/${tk}`;
-      }
+      // Return shop in presign response so confirm step can use it
+      return new Response(JSON.stringify({ videoUrl, thumbUrl, key, thumbKey, shop }), { headers: HEADERS });
+    }
+
+    // ── CONFIRM ──
+    if (type === "confirm") {
+      const { createClient } = await import("@supabase/supabase-js");
+      const supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+
+      const key = formData.get("key");
+      const thumbKey = formData.get("thumb_key");
+      const hasThumb = formData.get("has_thumb") === "true";
+      const r2Url = `${process.env.R2_PUBLIC_URL}/${key}`;
+      const thumbnailUrl = hasThumb ? `${process.env.R2_PUBLIC_URL}/${thumbKey}` : null;
+
+      console.log("Confirm upload - shop:", shop, "key:", key);
 
       const { error } = await supabase.from("videos").insert({
         shop_id: shop, title, r2_url: r2Url, r2_key: key,
-        source_url: sourceUrl, status: "draft", views: 0, product_ids: [], show_on: [],
+        status: "draft", views: 0, product_ids: [], show_on: [],
         thumbnail_url: thumbnailUrl,
       });
-      if (error) throw error;
-      return new Response(JSON.stringify({ ok: true }), { headers: HEADERS });
-    }
 
-    if (type === "file") {
-      const file = formData.get("video_file");
-      if (!file || file.size === 0) return new Response(JSON.stringify({ error: "No file" }), { headers: HEADERS });
-      buffer = Buffer.from(await file.arrayBuffer());
-      contentType = file.type || "video/mp4";
-      const ext = file.name.split(".").pop() || "mp4";
-      key = `videos/${uuidv4()}.${ext}`;
-      await getS3().send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key, Body: buffer, ContentType: contentType }));
-      r2Url = `${process.env.R2_PUBLIC_URL}/${key}`;
-
-      let thumbnailUrl = null;
-      const thumb = formData.get("thumbnail");
-      if (thumb && thumb.size > 0) {
-        const tb = Buffer.from(await thumb.arrayBuffer());
-        const tk = `thumbnails/${uuidv4()}.jpg`;
-        await getS3().send(new PutObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: tk, Body: tb, ContentType: "image/jpeg" }));
-        thumbnailUrl = `${process.env.R2_PUBLIC_URL}/${tk}`;
+      if (error) {
+        console.error("Supabase error:", error);
+        return new Response(JSON.stringify({ error: `${error.message} (code:${error.code})` }), { headers: HEADERS });
       }
 
-      const { error } = await supabase.from("videos").insert({
-        shop_id: shop, title: title || file.name.replace(/\.[^.]+$/, ""),
-        r2_url: r2Url, r2_key: key, status: "draft", views: 0, product_ids: [], show_on: [],
-        thumbnail_url: thumbnailUrl,
-      });
-      if (error) throw error;
-      return new Response(JSON.stringify({ ok: true }), { headers: HEADERS });
+      return new Response(JSON.stringify({ ok: true, shop }), { headers: HEADERS });
     }
 
     return new Response(JSON.stringify({ error: "Unknown type" }), { headers: HEADERS });
   } catch (e) {
+    console.error("Upload error:", e);
     return new Response(JSON.stringify({ error: e.message }), { headers: HEADERS });
   }
 };
