@@ -1,7 +1,10 @@
-import { useLoaderData, Form, useNavigation, useNavigate, useFetcher } from "react-router";
-import { useState, useRef, useEffect } from "react";
+import { useLoaderData, Form, useNavigation, useNavigate, useFetcher, useRouteError } from "react-router";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { authenticate } from "../shopify.server";
-import { supabase } from "../supabase.server";
+import { boundary } from "@shopify/shopify-app-react-router/server";
+import { createClient } from "@supabase/supabase-js";
+const getSupabase = () => createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabase = getSupabase();
 
 /* ── S3 / R2 client ── */
 
@@ -17,19 +20,24 @@ export const loader = async ({ request }) => {
 
   let products = [];
   try {
-    const res = await admin.graphql(`
-      query {
-        products(first: 250, sortKey: TITLE) {
-          edges { node { id title handle featuredImage { url } variants(first:1){ edges { node { price } } } } }
-        }
-      }
-    `);
-    const pData = await res.json();
-    products = pData.data.products.edges.map(e => ({
-      id: e.node.id, title: e.node.title, handle: e.node.handle,
-      image: e.node.featuredImage?.url,
-      price: e.node.variants.edges[0]?.node.price,
-    }));
+    let hasNextPage = true;
+    let cursor = null;
+    while (hasNextPage) {
+      const query = cursor
+        ? `query { products(first: 250, sortKey: TITLE, after: "${cursor}") { pageInfo { hasNextPage endCursor } edges { node { id title handle featuredImage { url } variants(first:1){ edges { node { price } } } } } } }`
+        : `query { products(first: 250, sortKey: TITLE) { pageInfo { hasNextPage endCursor } edges { node { id title handle featuredImage { url } variants(first:1){ edges { node { price } } } } } } }`;
+      const res = await admin.graphql(query);
+      const pData = await res.json();
+      const page = pData.data.products;
+      const batch = page.edges.map(e => ({
+        id: e.node.id, title: e.node.title, handle: e.node.handle,
+        image: e.node.featuredImage?.url,
+        price: e.node.variants.edges[0]?.node.price,
+      }));
+      products = [...products, ...batch];
+      hasNextPage = page.pageInfo.hasNextPage;
+      cursor = page.pageInfo.endCursor;
+    }
   } catch (e) { console.error("Failed to fetch products:", e); }
 
   return { videos: videos || [], products };
@@ -160,6 +168,145 @@ export default function Videos() {
   const [tagModal, setTagModal] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProducts, setSelectedProducts] = useState([]);
+
+  // Direct-upload state (bypasses Vercel 4.5MB limit)
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isDirectUploading, setIsDirectUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+
+  const handleDirectUpload = useCallback(async (e) => {
+    e.preventDefault();
+    if (!selectedFile) return;
+    setIsDirectUploading(true);
+    setUploadError(null);
+    setUploadProgress(0);
+    try {
+      const titleVal = e.target.querySelector("[name=title]")?.value || selectedFile.name.replace(/\.[^.]+$/, "");
+      const ext = selectedFile.name.split(".").pop() || "mp4";
+      // 1. Get presigned URLs from server
+      const presignForm = new FormData();
+      presignForm.set("type", "presign");
+      presignForm.set("ext", ext);
+      presignForm.set("content_type", selectedFile.type || "video/mp4");
+      presignForm.set("title", titleVal);
+      const presignRes = await fetch("/api/upload", { method: "POST", body: presignForm });
+      const { videoUrl, thumbUrl, key, thumbKey, error: presignErr } = await presignRes.json();
+      if (presignErr) throw new Error(presignErr);
+
+      // 2. Upload video directly to R2 via presigned URL (XHR for progress)
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", videoUrl);
+        xhr.setRequestHeader("Content-Type", selectedFile.type || "video/mp4");
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 90));
+        };
+        xhr.onload = () => xhr.status < 300 ? resolve() : reject(new Error("Video upload failed: " + xhr.status));
+        xhr.onerror = () => reject(new Error("Network error during upload"));
+        xhr.send(selectedFile);
+      });
+      setUploadProgress(92);
+
+      // 3. Upload thumbnail directly to R2
+      let hasThumb = false;
+      const thumbFile = thumbnailInputRef.current?.files?.[0];
+      if (thumbFile) {
+        await fetch(thumbUrl, { method: "PUT", headers: { "Content-Type": "image/jpeg" }, body: thumbFile });
+        hasThumb = true;
+      }
+      setUploadProgress(97);
+
+      // 4. Confirm — save record in Supabase
+      const confirmForm = new FormData();
+      confirmForm.set("type", "confirm");
+      confirmForm.set("key", key);
+      confirmForm.set("thumb_key", thumbKey);
+      confirmForm.set("has_thumb", hasThumb ? "true" : "false");
+      confirmForm.set("title", titleVal);
+      confirmForm.set("shop", new URLSearchParams(window.location.search).get("shop") || "");
+      const confirmRes = await fetch("/api/upload", { method: "POST", body: confirmForm });
+      const { ok, error: confirmErr } = await confirmRes.json();
+      if (confirmErr) throw new Error(confirmErr);
+      setUploadProgress(100);
+      setShowImport(false);
+      setSelectedFile(null);
+      setUploadProgress(0);
+      // Refresh the page to show new video
+      window.location.reload();
+    } catch (err) {
+      setUploadError(err.message);
+    } finally {
+      setIsDirectUploading(false);
+    }
+  }, [selectedFile]);
+
+  // URL direct-upload state
+  const [urlValue, setUrlValue] = useState("");
+  const [isUrlUploading, setIsUrlUploading] = useState(false);
+  const [urlUploadProgress, setUrlUploadProgress] = useState(0);
+  const [urlUploadError, setUrlUploadError] = useState(null);
+
+  const handleUrlUpload = async (e) => {
+    e.preventDefault();
+    if (!urlValue) return;
+    setIsUrlUploading(true);
+    setUrlUploadError(null);
+    setUrlUploadProgress(0);
+    try {
+      const titleVal = e.target.querySelector("[name=title]")?.value || "Untitled Video";
+      const presignForm = new FormData();
+      presignForm.set("type", "presign");
+      presignForm.set("ext", "mp4");
+      presignForm.set("content_type", "video/mp4");
+      presignForm.set("title", titleVal);
+      const presignRes = await fetch("/api/upload", { method: "POST", body: presignForm });
+      const { videoUrl, thumbUrl, key, thumbKey, error: presignErr } = await presignRes.json();
+      if (presignErr) throw new Error(presignErr);
+      setUrlUploadProgress(10);
+      const videoRes = await fetch(urlValue);
+      if (!videoRes.ok) throw new Error("Could not fetch video: " + videoRes.status);
+      const videoBlob = await videoRes.blob();
+      setUrlUploadProgress(40);
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", videoUrl);
+        xhr.setRequestHeader("Content-Type", "video/mp4");
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) setUrlUploadProgress(40 + Math.round((ev.loaded / ev.total) * 50));
+        };
+        xhr.onload = () => xhr.status < 300 ? resolve() : reject(new Error("Upload failed: " + xhr.status));
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.send(videoBlob);
+      });
+      setUrlUploadProgress(92);
+      let hasThumb = false;
+      const thumbFile = thumbnailInputRef.current?.files?.[0];
+      if (thumbFile) {
+        await fetch(thumbUrl, { method: "PUT", headers: { "Content-Type": "image/jpeg" }, body: thumbFile });
+        hasThumb = true;
+      }
+      setUrlUploadProgress(97);
+      const confirmForm = new FormData();
+      confirmForm.set("type", "confirm");
+      confirmForm.set("key", key);
+      confirmForm.set("thumb_key", thumbKey);
+      confirmForm.set("has_thumb", hasThumb ? "true" : "false");
+      confirmForm.set("title", titleVal);
+      confirmForm.set("shop", new URLSearchParams(window.location.search).get("shop") || "");
+      const confirmRes = await fetch("/api/upload", { method: "POST", body: confirmForm });
+      const { error: confirmErr } = await confirmRes.json();
+      if (confirmErr) throw new Error(confirmErr);
+      setUrlUploadProgress(100);
+      setShowImport(false);
+      setUrlValue("");
+      setUrlUploadProgress(0);
+      window.location.reload();
+    } catch (err) {
+      setUrlUploadError(err.message);
+    } finally {
+      setIsUrlUploading(false);
+    }
+  };
 
   // fetcher drives both import forms — state tracks in-flight, data has result
   const isImporting = fetcher.state !== "idle";
@@ -359,8 +506,7 @@ export default function Videos() {
 
             {/* ── URL tab ── */}
             {importTab === "url" && (
-              <fetcher.Form method="post" style={{ padding: "24px 28px 28px" }}>
-                <input type="hidden" name="action" value="import_url" />
+              <form onSubmit={handleUrlUpload} style={{ padding: "24px 28px 28px" }}>
                 <div style={{ marginBottom: "16px" }}>
                   <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: C.text, marginBottom: "6px" }}>
                     Video Title <span style={{ color: C.muted, fontWeight: "400" }}>(optional)</span>
@@ -374,14 +520,15 @@ export default function Videos() {
                   <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: C.text, marginBottom: "6px" }}>
                     Direct Video URL <span style={{ color: "#dc2626" }}>*</span>
                   </label>
-                  <input name="source_url" type="url" required placeholder="https://example.com/video.mp4"
+                  <input type="url" required placeholder="https://example.com/video.mp4"
+                    value={urlValue}
+                    onChange={(e) => { setUrlValue(e.target.value); setUrlUploadError(null); }}
                     onBlur={(e) => handleUrlThumb(e.target.value)}
                     style={{
                       width: "100%", padding: "10px 14px", border: `1.5px solid ${C.border}`, borderRadius: "8px",
                       fontSize: "14px", outline: "none", boxSizing: "border-box", color: C.text, fontFamily: "inherit",
                     }} />
-                  <p style={{ margin: "6px 0 0", fontSize: "12px", color: C.muted }}>Must be a direct .mp4 or .mov link.</p>
-                  {/* Hidden thumbnail input — populated by extractFrame */}
+                  <p style={{ margin: "6px 0 0", fontSize: "12px", color: C.muted }}>Must be a direct .mp4 or .mov link. No size limit.</p>
                   <input ref={thumbnailInputRef} type="file" name="thumbnail" style={{ display: "none" }} />
                   {thumbPreview && (
                     <div style={{ marginTop: "12px", borderRadius: "8px", overflow: "hidden", border: `1px solid ${C.border}` }}>
@@ -390,22 +537,40 @@ export default function Videos() {
                     </div>
                   )}
                 </div>
-                <button type="submit" disabled={isImporting} style={{
-                  width: "100%", padding: "12px", background: isImporting ? "#8a9da5" : C.accent,
+                {isUrlUploading && (
+                  <div style={{ marginBottom: "16px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                      <span style={{ fontSize: "12px", color: C.muted }}>
+                        {urlUploadProgress < 40 ? "Preparing..." : urlUploadProgress < 92 ? "Uploading to storage..." : "Saving..."}
+                      </span>
+                      <span style={{ fontSize: "12px", fontWeight: "600", color: C.accent }}>{urlUploadProgress}%</span>
+                    </div>
+                    <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "99px", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${urlUploadProgress}%`, background: C.accent, borderRadius: "99px", transition: "width 0.3s ease" }} />
+                    </div>
+                  </div>
+                )}
+                {urlUploadError && (
+                  <div style={{ marginBottom: "14px", padding: "10px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "8px", color: "#dc2626", fontSize: "13px" }}>
+                    ❌ {urlUploadError}
+                  </div>
+                )}
+                <button type="submit" disabled={isUrlUploading || !urlValue} style={{
+                  width: "100%", padding: "12px",
+                  background: isUrlUploading ? "#8a9da5" : (!urlValue ? "#c8ced1" : C.accent),
                   color: "#fff", border: "none", borderRadius: "8px",
-                  cursor: isImporting ? "not-allowed" : "pointer",
+                  cursor: (isUrlUploading || !urlValue) ? "not-allowed" : "pointer",
                   fontSize: "14px", fontWeight: "600", fontFamily: "inherit",
                 }}>
-                  {isImporting ? "⏳ Uploading..." : "Import Video"}
+                  {isUrlUploading ? `⏳ Uploading ${urlUploadProgress}%...` : "Import Video"}
                 </button>
-                {isImporting && <p style={{ textAlign: "center", color: C.muted, marginTop: "10px", fontSize: "12px" }}>This may take a minute for large files...</p>}
-              </fetcher.Form>
+                {isUrlUploading && <p style={{ textAlign: "center", color: C.muted, marginTop: "10px", fontSize: "12px" }}>Please don't close this tab while uploading...</p>}
+              </form>
             )}
 
             {/* ── File upload tab ── */}
             {importTab === "file" && (
-              <fetcher.Form method="post" encType="multipart/form-data" style={{ padding: "24px 28px 28px" }}>
-                <input type="hidden" name="action" value="import_file" />
+              <form onSubmit={handleDirectUpload} style={{ padding: "24px 28px 28px" }}>
                 <div style={{ marginBottom: "16px" }}>
                   <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: C.text, marginBottom: "6px" }}>
                     Video Title <span style={{ color: C.muted, fontWeight: "400" }}>(optional)</span>
@@ -449,7 +614,7 @@ export default function Videos() {
                   ) : (
                     <>
                       <p style={{ margin: "0 0 4px", fontWeight: "600", fontSize: "14px", color: C.text }}>Drop file here or click to browse</p>
-                      <p style={{ margin: 0, fontSize: "12px", color: C.muted }}>Supports MP4, MOV · Max 1 GB per file</p>
+                      <p style={{ margin: 0, fontSize: "12px", color: C.muted }}>Supports MP4, MOV · No size limit</p>
                     </>
                   )}
                 </div>
@@ -460,17 +625,38 @@ export default function Videos() {
                   </div>
                 )}
 
-                <button type="submit" disabled={isImporting || !selectedFile} style={{
+                {/* Progress bar */}
+                {isDirectUploading && (
+                  <div style={{ marginBottom: "16px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
+                      <span style={{ fontSize: "12px", color: C.muted }}>
+                        {uploadProgress < 92 ? "Uploading video..." : uploadProgress < 97 ? "Uploading thumbnail..." : "Saving..."}
+                      </span>
+                      <span style={{ fontSize: "12px", fontWeight: "600", color: C.accent }}>{uploadProgress}%</span>
+                    </div>
+                    <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "99px", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${uploadProgress}%`, background: C.accent, borderRadius: "99px", transition: "width 0.3s ease" }} />
+                    </div>
+                  </div>
+                )}
+
+                {uploadError && (
+                  <div style={{ marginBottom: "14px", padding: "10px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "8px", color: "#dc2626", fontSize: "13px" }}>
+                    ❌ {uploadError}
+                  </div>
+                )}
+
+                <button type="submit" disabled={isDirectUploading || !selectedFile} style={{
                   width: "100%", padding: "12px",
-                  background: isImporting ? "#8a9da5" : (!selectedFile ? "#c8ced1" : C.accent),
+                  background: isDirectUploading ? "#8a9da5" : (!selectedFile ? "#c8ced1" : C.accent),
                   color: "#fff", border: "none", borderRadius: "8px",
-                  cursor: (isImporting || !selectedFile) ? "not-allowed" : "pointer",
+                  cursor: (isDirectUploading || !selectedFile) ? "not-allowed" : "pointer",
                   fontSize: "14px", fontWeight: "600", fontFamily: "inherit",
                 }}>
-                  {isImporting ? "⏳ Uploading..." : "Upload Video"}
+                  {isDirectUploading ? `⏳ Uploading ${uploadProgress}%...` : "Upload Video"}
                 </button>
-                {isImporting && <p style={{ textAlign: "center", color: C.muted, marginTop: "10px", fontSize: "12px" }}>Please don't close this tab while uploading...</p>}
-              </fetcher.Form>
+                {isDirectUploading && <p style={{ textAlign: "center", color: C.muted, marginTop: "10px", fontSize: "12px" }}>Please don't close this tab while uploading...</p>}
+              </form>
             )}
           </div>
         </div>
@@ -543,3 +729,11 @@ export default function Videos() {
     </div>
   );
 }
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
