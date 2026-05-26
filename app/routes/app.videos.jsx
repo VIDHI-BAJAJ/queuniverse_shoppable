@@ -446,6 +446,7 @@ const handleUrlUpload = async (e) => {
           <div style={{
             background: "#fff", borderRadius: "16px", width: "100%", maxWidth: "620px",
             boxShadow: "0 24px 80px rgba(0,0,0,0.25)", overflow: "hidden",
+            maxHeight: "90vh", overflowY: "auto",
           }}>
             {/* Modal header */}
             <div style={{ padding: "24px 28px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
