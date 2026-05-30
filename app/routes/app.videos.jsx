@@ -1,4 +1,4 @@
-import { useLoaderData, Form, useNavigation, useNavigate, useFetcher, useRouteError } from "react-router";
+import { useLoaderData, Form, useNavigation, useNavigate, useFetcher, useRouteError, useRevalidator } from "react-router";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -101,6 +101,7 @@ export default function Videos() {
   const { videos, products } = useLoaderData();
   const navigation = useNavigation();
   const fetcher = useFetcher();
+  const revalidator = useRevalidator();
 
   /* Import modal state */
   const [showImport, setShowImport] = useState(false);
@@ -119,7 +120,7 @@ export default function Videos() {
     vid.playsInline = true;
     vid.preload = "metadata";
     vid.onloadeddata = () => {
-      vid.currentTime = 0.1; // seek slightly in to avoid pure black frames
+      vid.currentTime = 0.1;
     };
     vid.onseeked = () => {
       const canvas = document.createElement("canvas");
@@ -144,7 +145,6 @@ export default function Videos() {
     const blob = await extractFrame(file);
     if (blob) {
       setThumbPreview(URL.createObjectURL(blob));
-      // Store blob in a DataTransfer so we can attach it to a hidden input
       const dt = new DataTransfer();
       dt.items.add(new File([blob], "thumbnail.jpg", { type: "image/jpeg" }));
       if (thumbnailInputRef.current) thumbnailInputRef.current.files = dt.files;
@@ -227,12 +227,14 @@ export default function Videos() {
       const confirmRes = await fetch("/api/upload", { method: "POST", body: confirmForm });
       const { ok, error: confirmErr } = await confirmRes.json();
       if (confirmErr) throw new Error(confirmErr);
+
       setUploadProgress(100);
       setShowImport(false);
       setSelectedFile(null);
+      setThumbPreview(null);
       setUploadProgress(0);
-      // Refresh the page to show new video
-      window.location.reload();
+      // Revalidate loaders to show new video without breaking App Bridge session
+      revalidator.revalidate();
     } catch (err) {
       setUploadError(err.message);
     } finally {
@@ -246,41 +248,70 @@ export default function Videos() {
   const [urlUploadProgress, setUrlUploadProgress] = useState(0);
   const [urlUploadError, setUrlUploadError] = useState(null);
 
- // Replace the entire handleUrlUpload function in app.videos.jsx with this:
-
-const handleUrlUpload = async (e) => {
-  e.preventDefault();
-  if (!urlValue) return;
-  setIsUrlUploading(true);
-  setUrlUploadError(null);
-  setUrlUploadProgress(10);
-
-  try {
-    const titleVal = e.target.querySelector("[name=title]")?.value || "Untitled Video";
-
-    // Send URL to server — server fetches + uploads to R2 (avoids browser CORS)
-    setUrlUploadProgress(20);
-    const fd = new FormData();
-    fd.set("type", "url_import");
-    fd.set("source_url", urlValue);
-    fd.set("title", titleVal);
-
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-
-    setUrlUploadProgress(100);
-    setShowImport(false);
-    setUrlValue("");
+  const handleUrlUpload = async (e) => {
+    e.preventDefault();
+    if (!urlValue) return;
+    setIsUrlUploading(true);
+    setUrlUploadError(null);
     setUrlUploadProgress(0);
-    window.location.reload();
+    try {
+      const titleVal = e.target.querySelector("[name=title]")?.value || "Untitled Video";
+      const presignForm = new FormData();
+      presignForm.set("type", "presign");
+      presignForm.set("ext", "mp4");
+      presignForm.set("content_type", "video/mp4");
+      presignForm.set("title", titleVal);
+      const presignRes = await fetch("/api/upload", { method: "POST", body: presignForm });
+      const { videoUrl, thumbUrl, key, thumbKey, error: presignErr } = await presignRes.json();
+      if (presignErr) throw new Error(presignErr);
+      setUrlUploadProgress(10);
+      const videoRes = await fetch(urlValue);
+      if (!videoRes.ok) throw new Error("Could not fetch video: " + videoRes.status);
+      const videoBlob = await videoRes.blob();
+      setUrlUploadProgress(40);
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", videoUrl);
+        xhr.setRequestHeader("Content-Type", "video/mp4");
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) setUrlUploadProgress(40 + Math.round((ev.loaded / ev.total) * 50));
+        };
+        xhr.onload = () => xhr.status < 300 ? resolve() : reject(new Error("Upload failed: " + xhr.status));
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.send(videoBlob);
+      });
+      setUrlUploadProgress(92);
+      let hasThumb = false;
+      const thumbFile = thumbnailInputRef.current?.files?.[0];
+      if (thumbFile) {
+        await fetch(thumbUrl, { method: "PUT", headers: { "Content-Type": "image/jpeg" }, body: thumbFile });
+        hasThumb = true;
+      }
+      setUrlUploadProgress(97);
+      const confirmForm = new FormData();
+      confirmForm.set("type", "confirm");
+      confirmForm.set("key", key);
+      confirmForm.set("thumb_key", thumbKey);
+      confirmForm.set("has_thumb", hasThumb ? "true" : "false");
+      confirmForm.set("title", titleVal);
+      confirmForm.set("shop", new URLSearchParams(window.location.search).get("shop") || "");
+      const confirmRes = await fetch("/api/upload", { method: "POST", body: confirmForm });
+      const { error: confirmErr } = await confirmRes.json();
+      if (confirmErr) throw new Error(confirmErr);
 
-  } catch (err) {
-    setUrlUploadError(err.message);
-  } finally {
-    setIsUrlUploading(false);
-  }
-};
+      setUrlUploadProgress(100);
+      setShowImport(false);
+      setUrlValue("");
+      setThumbPreview(null);
+      setUrlUploadProgress(0);
+      // Revalidate loaders to show new video without breaking App Bridge session
+      revalidator.revalidate();
+    } catch (err) {
+      setUrlUploadError(err.message);
+    } finally {
+      setIsUrlUploading(false);
+    }
+  };
 
   // fetcher drives both import forms — state tracks in-flight, data has result
   const isImporting = fetcher.state !== "idle";
