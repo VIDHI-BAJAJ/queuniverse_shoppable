@@ -1,26 +1,10 @@
-import { Outlet, useLoaderData, useRouteError } from "react-router";
-import { redirect } from "react-router";
+import { Outlet, useLoaderData, useRouteError, isRouteErrorResponse } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { authenticate, login } from "../shopify.server";
+import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
-  try {
-    await authenticate.admin(request);
-  } catch (error) {
-    // authenticate.admin throws a redirect Response for OAuth — let it through
-    if (error instanceof Response) throw error;
-
-    // Any other error (expired session, missing session, etc.)
-    // Redirect to login so Shopify re-initiates the auth flow
-    const url = new URL(request.url);
-    const shop = url.searchParams.get("shop");
-    if (shop) {
-      throw redirect(`/auth/login?shop=${shop}`);
-    }
-    throw redirect("/auth/login");
-  }
-
+  await authenticate.admin(request);
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
@@ -38,7 +22,15 @@ export default function App() {
 }
 
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+
+  // If it's a redirect response (Shopify auth flow) — re-throw so
+  // React Router follows the redirect instead of rendering an error page
+  if (error instanceof Response && error.status >= 300 && error.status < 400) {
+    throw error;
+  }
+
+  return boundary.error(error);
 }
 
 export const headers = (headersArgs) => {
