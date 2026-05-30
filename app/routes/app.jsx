@@ -2,25 +2,25 @@ import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { redirect } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { authenticate } from "../shopify.server";
+import { authenticate, login } from "../shopify.server";
 
 export const loader = async ({ request }) => {
-  const url = new URL(request.url);
+  try {
+    await authenticate.admin(request);
+  } catch (error) {
+    // authenticate.admin throws a redirect Response for OAuth — let it through
+    if (error instanceof Response) throw error;
 
-  // If there's no host param, Shopify Admin opened the app without embedding context
-  // (e.g. from search with ?link_source=search). We can't run authenticate.admin
-  // without it — redirect to auth/login so Shopify can re-initiate the OAuth/embed flow.
-  const host = url.searchParams.get("host");
-  if (!host) {
+    // Any other error (expired session, missing session, etc.)
+    // Redirect to login so Shopify re-initiates the auth flow
+    const url = new URL(request.url);
     const shop = url.searchParams.get("shop");
     if (shop) {
       throw redirect(`/auth/login?shop=${shop}`);
     }
-    // No shop either — redirect to login page to collect shop domain
     throw redirect("/auth/login");
   }
 
-  await authenticate.admin(request);
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
