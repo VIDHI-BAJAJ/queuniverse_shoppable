@@ -1,12 +1,216 @@
 {{ 'nq-carousel.css' | asset_url | stylesheet_tag }}
 <link rel="preconnect" href="https://queuniverse-shoppable.vercel.app" crossorigin>
 <link rel="dns-prefetch" href="https://queuniverse-shoppable.vercel.app">
-<!-- NQ: preconnect to R2/CDN origin so first video loads instantly -->
 <link rel="preconnect" href="https://pub-d6dfe6c73ab249958b2610cf47b17860.r2.dev" crossorigin>
 <link rel="dns-prefetch" href="https://pub-d6dfe6c73ab249958b2610cf47b17860.r2.dev">
 <div id="nq-first-video-preload-{{ block.id }}"></div>
 
-<div class="nq-section nq-tile-type-{{ block.settings.tile_type }}"
+{% comment %} ── Device Visibility ── {% endcomment %}
+{% assign show_device = block.settings.show_on_device %}
+<style>
+  {% if show_device == 'desktop_only' %}
+    #nq-section-{{ block.id }} { display: block; }
+    @media (max-width: 767px) { #nq-section-{{ block.id }} { display: none !important; } }
+  {% elsif show_device == 'mobile_only' %}
+    #nq-section-{{ block.id }} { display: none; }
+    @media (max-width: 767px) { #nq-section-{{ block.id }} { display: block !important; } }
+  {% else %}
+    #nq-section-{{ block.id }} { display: block; }
+  {% endif %}
+
+  /* ── Hero + Slide layout ── */
+  .nq-hero-slide-wrap {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+  }
+  .nq-hero-slide-wrap .nq-hero-main {
+    flex: 0 0 auto;
+    width: clamp(260px, 52%, 420px);
+    position: relative;
+    border-radius: 18px;
+    overflow: hidden;
+    cursor: pointer;
+    background: #111;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+    transition: box-shadow 0.2s;
+  }
+  .nq-hero-slide-wrap .nq-hero-main:hover { box-shadow: 0 12px 40px rgba(0,0,0,0.32); }
+  .nq-hero-slide-wrap .nq-hero-main video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .nq-hero-slide-wrap .nq-hero-main .nq-hero-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.72) 0%, transparent 55%);
+    pointer-events: none;
+  }
+  .nq-hero-slide-wrap .nq-hero-main .nq-hero-creator {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 2;
+  }
+  .nq-hero-slide-wrap .nq-hero-main .nq-hero-creator img {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    object-fit: cover;
+    background: #555;
+  }
+  .nq-hero-slide-wrap .nq-hero-main .nq-hero-creator-info {
+    color: #fff;
+    line-height: 1.3;
+  }
+  .nq-hero-slide-wrap .nq-hero-main .nq-hero-creator-name {
+    font-weight: 700;
+    font-size: 15px;
+    display: block;
+  }
+  .nq-hero-slide-wrap .nq-hero-main .nq-hero-creator-meta {
+    font-size: 12px;
+    opacity: 0.85;
+    display: block;
+  }
+  .nq-hero-slide-wrap .nq-hero-main .nq-hero-watermark {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    z-index: 2;
+    background: rgba(255,255,255,0.92);
+    border-radius: 10px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #222;
+    pointer-events: none;
+  }
+  .nq-hero-slide-wrap .nq-hero-main .nq-hero-play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 54px;
+    height: 54px;
+    background: rgba(255,255,255,0.88);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 2;
+    transition: opacity 0.2s;
+  }
+  .nq-hero-slide-wrap .nq-hero-main:hover .nq-hero-play { opacity: 0; }
+  .nq-hero-slide-wrap .nq-hero-main .nq-hero-play svg { margin-left: 4px; }
+
+  /* Side scroll strip */
+  .nq-hero-slide-strip-wrap {
+    flex: 1 1 0;
+    overflow: hidden;
+    position: relative;
+  }
+  .nq-hero-slide-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    padding-right: 2px;
+  }
+  .nq-hero-slide-strip::-webkit-scrollbar { display: none; }
+  .nq-hero-slide-strip .nq-side-card {
+    flex: 0 0 auto;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    background: #111;
+    position: relative;
+    transition: transform 0.18s, box-shadow 0.18s;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  }
+  .nq-hero-slide-strip .nq-side-card:hover { transform: scale(1.025); box-shadow: 0 6px 22px rgba(0,0,0,0.22); }
+  .nq-hero-slide-strip .nq-side-card video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .nq-hero-slide-strip .nq-side-card .nq-side-active-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    border: 3px solid transparent;
+    transition: border-color 0.2s;
+    pointer-events: none;
+    z-index: 3;
+  }
+  .nq-hero-slide-strip .nq-side-card.nq-side-active .nq-side-active-ring {
+    border-color: #ff3366;
+  }
+  .nq-hero-slide-strip .nq-side-card .nq-views {
+    position: absolute;
+    bottom: 6px;
+    left: 8px;
+    font-size: 11px;
+    color: #fff;
+    background: rgba(0,0,0,0.44);
+    padding: 2px 6px;
+    border-radius: 20px;
+    z-index: 2;
+  }
+
+  /* Scroll nav arrows for hero+slide */
+  .nq-hero-strip-nav {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    flex: 0 0 28px;
+  }
+  .nq-hero-strip-nav button {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: #f0f0f0;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    padding: 0;
+    color: #333;
+  }
+  .nq-hero-strip-nav button:hover { background: #ddd; }
+
+  /* Mobile: hero on top, strip below horizontal */
+  @media (max-width: 640px) {
+    .nq-hero-slide-wrap { flex-direction: column; }
+    .nq-hero-slide-wrap .nq-hero-main { width: 100%; }
+    .nq-hero-slide-strip-wrap { width: 100%; height: 150px; overflow: hidden; }
+    .nq-hero-slide-strip { flex-direction: row; height: 100%; overflow-x: auto; overflow-y: hidden; gap: 8px; }
+    .nq-hero-slide-strip .nq-side-card { flex: 0 0 100px; height: 100%; }
+    .nq-hero-strip-nav { flex-direction: row; justify-content: flex-end; }
+  }
+</style>
+
+<div id="nq-section-{{ block.id }}"
+     class="nq-section nq-tile-type-{{ block.settings.tile_type }}"
      style="padding: {{ block.settings.vertical_padding }}px {{ block.settings.horizontal_padding }}px;">
 
   <h2 class="nq-heading"
@@ -26,6 +230,37 @@
       <button class="nq-3d-prev" id="nq-3d-prev-{{ block.id }}">&#10094;</button>
       <div class="nq-3d-track" id="nq-carousel-{{ block.id }}"></div>
       <button class="nq-3d-next" id="nq-3d-next-{{ block.id }}">&#10095;</button>
+    </div>
+
+  {% elsif tt == 'hero_slide' %}
+    {% comment %} ── NEW: Hero + Side Slide layout ── {% endcomment %}
+    <div class="nq-hero-slide-wrap" id="nq-hero-wrap-{{ block.id }}">
+      <div class="nq-hero-main" id="nq-hero-main-{{ block.id }}">
+        <div class="nq-hero-overlay"></div>
+        <video id="nq-hero-video-{{ block.id }}" autoplay muted loop playsinline style="width:100%;height:{{ block.settings.card_height }}px;object-fit:cover;display:block;"></video>
+        <div class="nq-hero-play">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><polygon points="5,3 19,12 5,21" fill="#e02" /></svg>
+        </div>
+        <div class="nq-hero-creator" id="nq-hero-creator-{{ block.id }}">
+          <img id="nq-hero-avatar-{{ block.id }}" src="" onerror="this.style.display='none'" alt="">
+          <div class="nq-hero-creator-info">
+            <span class="nq-hero-creator-name" id="nq-hero-name-{{ block.id }}"></span>
+            <span class="nq-hero-creator-meta" id="nq-hero-meta-{{ block.id }}"></span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:6px;flex:1;min-width:0;">
+        <div class="nq-hero-slide-strip-wrap">
+          <div class="nq-hero-slide-strip" id="nq-carousel-{{ block.id }}">
+            <div class="nq-loading" style="padding:20px;color:#999;font-size:13px;">Loading...</div>
+          </div>
+        </div>
+        <div class="nq-hero-strip-nav">
+          <button id="nq-strip-up-{{ block.id }}" title="Scroll up">&#9650;</button>
+          <button id="nq-strip-dn-{{ block.id }}" title="Scroll down">&#9660;</button>
+        </div>
+      </div>
     </div>
 
   {% else %}
@@ -96,7 +331,7 @@
   })();
 
   var CACHE_KEY = "nq_v6_" + shop + (productId ? "_pdp_" + productId : "_home");
-  var CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+  var CACHE_TTL = 10 * 60 * 1000;
 
   function readCache() {
     try {
@@ -117,11 +352,6 @@
     try { localStorage.removeItem(CACHE_KEY); } catch(e) {}
   }
 
-  /* ════════════════════════════════════════════════════════════
-     CORE: filterVideos + renderVideos
-     Always called with fresh or cached data.
-     Completely re-draws the container every time.
-  ════════════════════════════════════════════════════════════ */
   function filterVideos(raw) {
     if (!productId) {
       var filtered = (raw || []).filter(function(v) {
@@ -138,8 +368,6 @@
     }
   }
 
-  /* ── Inject a <link rel="preload"> for the first video URL so the browser
-        fetches it at highest priority, in parallel with everything else.    ── */
   function preloadFirstVideoLink(url) {
     if (!url || document.querySelector('link[data-nq-preload="1"]')) return;
     var link = document.createElement("link");
@@ -150,13 +378,126 @@
     document.head.appendChild(link);
   }
 
+  /* ════════════════════════════════════════════════════════════
+     HERO + SLIDE TILE TYPE
+  ════════════════════════════════════════════════════════════ */
+  var heroActiveIndex = 0;
+
+  function renderHeroSlide(data) {
+    var raw = (data && data.videos) ? data.videos : [];
+    allVideos = filterVideos(raw);
+    if (!allVideos.length) return;
+
+    preloadFirstVideoLink(allVideos[0].r2_url);
+
+    var strip = document.getElementById("nq-carousel-" + blockId);
+    if (!strip) return;
+    strip.innerHTML = "";
+
+    heroActiveIndex = 0;
+
+    /* Side-strip cards */
+    allVideos.forEach(function(video, i) {
+      var card = document.createElement("div");
+      card.className = "nq-side-card" + (i === 0 ? " nq-side-active" : "");
+      card.style.cssText = "height:" + Math.round(cardH * 0.30) + "px;";
+
+      var ring = document.createElement("div");
+      ring.className = "nq-side-active-ring";
+      card.appendChild(ring);
+
+      var vid = document.createElement("video");
+      vid.muted       = true;
+      vid.loop        = true;
+      vid.playsInline = true;
+      vid.preload     = i < 3 ? "metadata" : "none";
+      if (video.thumbnail_url) vid.poster = video.thumbnail_url;
+      if (i < 6) vid.src = video.r2_url;
+      else vid.dataset.src = video.r2_url;
+      card.appendChild(vid);
+
+      var views = document.createElement("div");
+      views.className = "nq-views";
+      views.innerHTML = "&#128065; " + (video.views || 0);
+      card.appendChild(views);
+
+      card.onclick = function() { heroSetActive(i); };
+
+      /* Hover play for side cards */
+      card.onmouseenter = function() { if (vid.src) vid.play().catch(function(){}); };
+      card.onmouseleave = function() { vid.pause(); vid.currentTime = 0; };
+
+      strip.appendChild(card);
+    });
+
+    /* Load hero main video */
+    heroSetActive(0);
+
+    /* Strip scroll nav */
+    var upBtn = document.getElementById("nq-strip-up-" + blockId);
+    var dnBtn = document.getElementById("nq-strip-dn-" + blockId);
+    var scrollAmt = Math.round(cardH * 0.30) + 10;
+    if (upBtn) upBtn.onclick = function() { strip.scrollBy({ top: -scrollAmt, behavior: "smooth" }); };
+    if (dnBtn) dnBtn.onclick = function() { strip.scrollBy({ top:  scrollAmt, behavior: "smooth" }); };
+
+    /* Click on hero main opens popup */
+    var heroMain = document.getElementById("nq-hero-main-" + blockId);
+    if (heroMain) {
+      heroMain.onclick = function() { nqOpenPopup(blockId, heroActiveIndex); };
+    }
+  }
+
+  function heroSetActive(idx) {
+    heroActiveIndex = idx;
+    currentIndex    = idx; // keep popup in sync
+
+    var video = allVideos[idx];
+    if (!video) return;
+
+    /* Update hero video */
+    var heroVid = document.getElementById("nq-hero-video-" + blockId);
+    if (heroVid) {
+      heroVid.src = video.r2_url;
+      heroVid.load();
+      heroVid.play().catch(function(){});
+    }
+
+    /* Update creator info */
+    var nameEl = document.getElementById("nq-hero-name-" + blockId);
+    var metaEl = document.getElementById("nq-hero-meta-" + blockId);
+    var avatarEl = document.getElementById("nq-hero-avatar-" + blockId);
+    if (nameEl) nameEl.textContent = video.creator_name || video.title || "";
+    if (metaEl) metaEl.textContent = (video.followers ? video.followers + " followers" : "") +
+                                     (video.likes ? " | " + video.likes + " likes" : "");
+    if (avatarEl) {
+      avatarEl.src = video.creator_avatar || video.thumbnail_url || "";
+      avatarEl.style.display = (video.creator_avatar || video.thumbnail_url) ? "block" : "none";
+    }
+
+    /* Highlight active side card */
+    var strip = document.getElementById("nq-carousel-" + blockId);
+    if (strip) {
+      strip.querySelectorAll(".nq-side-card").forEach(function(c, i) {
+        c.classList.toggle("nq-side-active", i === idx);
+      });
+      /* Scroll active card into view */
+      var activeCard = strip.querySelectorAll(".nq-side-card")[idx];
+      if (activeCard) {
+        activeCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     MAIN RENDER (all tile types)
+  ════════════════════════════════════════════════════════════ */
   function renderVideos(data) {
+    /* Hero+Slide has its own renderer */
+    if (tileType === "hero_slide") { renderHeroSlide(data); return; }
+
     var raw = (data && data.videos) ? data.videos : [];
     allVideos = filterVideos(raw);
 
-    console.log("[NQ] renderVideos:", allVideos.length, "videos");
-
-    /* Preload first video at highest network priority */
     if (allVideos.length) preloadFirstVideoLink(allVideos[0].r2_url);
 
     var cont = document.getElementById("nq-carousel-" + blockId);
@@ -174,7 +515,6 @@
       return;
     }
 
-    /* Render first 3 immediately, rest in next frame */
     allVideos.slice(0, 3).forEach(function(v, i) { cont.appendChild(buildCard(v, i)); });
 
     if (allVideos.length > 3) {
@@ -193,24 +533,16 @@
     else                                   initScrollBtns();
   }
 
-  /* ════════════════════════════════════════════════════════════
-     INIT STRATEGY:
-     1. Render from cache instantly (0ms delay).
-     2. Always kick off a background fetch to refresh data.
-     3. On fetch success: update cache + silently refresh view counts.
-        If nothing was rendered yet, render now.
-  ════════════════════════════════════════════════════════════ */
   var rendered = false;
 
   function init() {
     rendered = false;
     var cached = readCache();
     if (cached && cached.videos && cached.videos.length) {
-      console.log("[NQ] CACHE HIT — instant render");
       renderVideos(cached);
       rendered = true;
     }
-    doFetch(); // always refresh in background
+    doFetch();
   }
 
   var apiURL = API + "?shop=" + shop + (productId ? "&product_id=gid://shopify/Product/" + productId : "");
@@ -222,7 +554,6 @@
     tries = tries || 3;
 
     if (!rendered) {
-      // Only set a timeout error if we haven't shown anything yet
       giveUpTimer = setTimeout(function() {
         if (!rendered) {
           var cont = document.getElementById("nq-carousel-" + blockId);
@@ -231,7 +562,6 @@
       }, 12000);
     }
 
-    console.log("[NQ] Fetching:", apiURL);
     fetch(apiURL)
       .then(function(r) {
         if (!r.ok) throw new Error("HTTP " + r.status);
@@ -240,21 +570,17 @@
       .then(function(data) {
         isFetching = false;
         if (giveUpTimer) { clearTimeout(giveUpTimer); giveUpTimer = null; }
-        var count = data && data.videos ? data.videos.length : 0;
-        console.log("[NQ] Fetch OK:", count, "videos");
         writeCache(data);
         if (!rendered) {
           renderVideos(data);
           rendered = true;
         } else {
-          /* Already showing from cache — just update view counts silently */
           allVideos = filterVideos(data.videos || []);
           refreshViewCounters();
         }
       })
       .catch(function(err) {
         isFetching = false;
-        console.warn("[NQ] Fetch error:", String(err), "retries left:", tries - 1);
         if (tries > 1) {
           setTimeout(function() { isFetching = false; doFetch(tries - 1); }, 3000);
         } else {
@@ -267,66 +593,44 @@
       });
   }
 
-  /* ════════════════════════════════════════════════════════════
-     NAVIGATION RECOVERY
-     Handles ALL the ways a user can come back to this page:
-       A) Browser back button     → pageshow (persisted=true)
-       B) Tab switch back         → visibilitychange
-       C) Normal load             → init() at bottom
-  ════════════════════════════════════════════════════════════ */
-
-  /* A) Back button / bfcache restore */
+  /* ── Back-nav / bfcache ── */
   window.addEventListener("pageshow", function(e) {
-    if (!e.persisted) return; // normal load — init() handles it
-    console.log("[NQ] pageshow persisted — checking carousel");
-    var cont = document.getElementById("nq-carousel-" + blockId);
-    if (!cont) return;
-
-    /* Always wipe and re-render on back navigation.
-       This is the safest fix — bfcache can restore stale DOM state. */
+    if (!e.persisted) return;
     rendered = false;
     isFetching = false;
-    cont.innerHTML = "";
-
+    var cont = document.getElementById("nq-carousel-" + blockId);
+    if (cont) cont.innerHTML = "";
     var cached = readCache();
     if (cached && cached.videos && cached.videos.length) {
-      console.log("[NQ] pageshow: rendering from cache instantly");
       renderVideos(cached);
       rendered = true;
-      doFetch(); // refresh in background
+      doFetch();
     } else {
-      console.log("[NQ] pageshow: no cache, fetching");
       doFetch();
     }
   });
 
-  /* B) Tab becomes visible */
+  /* ── Tab visibility ── */
   document.addEventListener("visibilitychange", function() {
     if (document.visibilityState !== "visible") return;
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (!cont) return;
-    var cardCount = cont.querySelectorAll(".nq-card").length;
-    console.log("[NQ] visibilitychange — cards found:", cardCount);
-
-    if (cardCount === 0) {
-      /* Carousel is empty — re-render from cache or fetch */
+    if (cont.querySelectorAll(".nq-card,.nq-side-card").length === 0) {
       rendered = false;
       isFetching = false;
       var cached = readCache();
       if (cached && cached.videos && cached.videos.length) {
-        console.log("[NQ] visibilitychange: re-rendering from cache");
         renderVideos(cached);
         rendered = true;
       }
       doFetch();
     }
-    /* If cards already visible, do nothing — user can see the carousel */
   });
 
   function refreshViewCounters() {
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (!cont) return;
-    cont.querySelectorAll(".nq-card").forEach(function(card, i) {
+    cont.querySelectorAll(".nq-card,.nq-side-card").forEach(function(card, i) {
       if (allVideos[i]) {
         var el = card.querySelector(".nq-views");
         if (el) el.innerHTML = "&#128065; " + (allVideos[i].views || 0);
@@ -335,7 +639,7 @@
   }
 
   /* ════════════════════════════════════════════════════════════
-     CARD BUILDER
+     CARD BUILDER (original tile types unchanged)
   ════════════════════════════════════════════════════════════ */
   function buildCard(video, index) {
     var card = document.createElement("div");
@@ -347,11 +651,6 @@
     videoEl.playsInline = true;
     videoEl.className   = "nq-video-el";
 
-    /* ── FAST VIDEO LOADING STRATEGY ──
-       index 0-2 → preload="auto"     + src set immediately (visible cards, buffer fully)
-       index 3-5 → preload="metadata" + src set immediately (next scroll targets)
-       index 6+  → preload="none"     + lazy src via IntersectionObserver 400px ahead
-    */
     if (video.thumbnail_url) videoEl.poster = video.thumbnail_url;
     videoEl.dataset.src = video.r2_url;
 
@@ -367,14 +666,7 @@
 
     card.onclick = function() { nqOpenPopup(blockId, index); };
 
-    /* ── AUTOPLAY ON SCROLL INTO VIEW ──
-       - Plays automatically when card enters viewport (no hover needed)
-       - Pauses when card leaves viewport (saves bandwidth)
-       - Hover still works on desktop as a bonus (keeps playing)
-       - For lazy cards (index >= 6): also loads src 400px before entering
-    */
     if ("IntersectionObserver" in window) {
-      /* Separate observer for lazy src loading (400px ahead) */
       if (index >= 6) {
         new IntersectionObserver(function(entries, obs) {
           entries.forEach(function(e) {
@@ -389,7 +681,6 @@
         }, { rootMargin: "400px" }).observe(card);
       }
 
-      /* Play/pause observer — fires when card is actually visible */
       new IntersectionObserver(function(entries) {
         entries.forEach(function(e) {
           if (e.isIntersecting) {
@@ -404,7 +695,6 @@
         });
       }, { threshold: 0.3 }).observe(card);
     } else {
-      /* Fallback: no IntersectionObserver — play on hover */
       videoEl.src = video.r2_url;
       card.onmouseenter = function() { videoEl.play().catch(function(){}); };
       card.onmouseleave = function() { videoEl.pause(); videoEl.currentTime = 0; };
@@ -530,7 +820,7 @@
   }
 
   /* ════════════════════════════════════════════════════════════
-     PRODUCT HELPERS
+     PRODUCT HELPERS (unchanged)
   ════════════════════════════════════════════════════════════ */
   function fmt(cents) {
     return (Math.round(parseInt(cents)) / 100).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -591,7 +881,7 @@
   }
 
   /* ════════════════════════════════════════════════════════════
-     SCROLL BUTTONS / SCROLL REVEAL / 3D
+     SCROLL / 3D (unchanged)
   ════════════════════════════════════════════════════════════ */
   function initScrollBtns() {
     var cont = document.getElementById("nq-carousel-" + blockId);
@@ -638,7 +928,7 @@
   }
 
   /* ════════════════════════════════════════════════════════════
-     POPUP
+     POPUP (unchanged)
   ════════════════════════════════════════════════════════════ */
   var isMuted       = true;
   var touchStartY   = 0;
@@ -686,12 +976,20 @@
 
   window.nqPrevVideo = function(bid) {
     if (bid !== blockId) return;
+    if (tileType === "hero_slide") {
+      var prev = (heroActiveIndex - 1 + allVideos.length) % allVideos.length;
+      heroSetActive(prev);
+    }
     currentIndex = (currentIndex - 1 + allVideos.length) % allVideos.length;
     showPopup(bid);
   };
 
   window.nqNextVideo = function(bid) {
     if (bid !== blockId) return;
+    if (tileType === "hero_slide") {
+      var next = (heroActiveIndex + 1) % allVideos.length;
+      heroSetActive(next);
+    }
     currentIndex = (currentIndex + 1) % allVideos.length;
     showPopup(bid);
   };
@@ -704,11 +1002,9 @@
     if (b) b.innerHTML = isMuted ? "&#128263;" : "&#128266;";
   };
 
-  /* ── Analytics ── */
+  /* ── Analytics (unchanged) ── */
   var TRACK = "https://queuniverse-shoppable.vercel.app/api/track";
 
-  /* trackEvent: same GET pattern as view tracking (which works).
-     Returns a Promise so click handler can await it before navigating. */
   function trackEvent(type, video, value) {
     try {
       var url = TRACK + "?video_id=" + video.id + "&shop=" + shop + "&event=" + type + (value ? "&value=" + value : "");
@@ -718,27 +1014,25 @@
   function trackView(video) {
     trackEvent("view", video);
     video.views = (video.views || 0) + 1;
-    bustCache(); // force fresh view count next load
+    bustCache();
     var cont = document.getElementById("nq-carousel-" + blockId);
     if (cont) {
       var idx = allVideos.indexOf(video);
-      var card = cont.querySelectorAll(".nq-card")[idx];
+      var card = cont.querySelectorAll(".nq-card,.nq-side-card")[idx];
       if (card) { var el = card.querySelector(".nq-views"); if (el) el.innerHTML = "&#128065; " + video.views; }
     }
   }
 
   var _watchInterval  = null;
-  var _watchStartTime = null;   /* ms timestamp when current video session began  */
-  var _watchLastTick  = null;   /* ms timestamp of last 5-s tick sent             */
+  var _watchStartTime = null;
+  var _watchLastTick  = null;
   var _watchVideo     = null;
 
   function startWatchTracking(video) {
-    /* stopWatchTracking() flushes partial time for the PREVIOUS video */
     stopWatchTracking();
     _watchVideo     = video;
     _watchStartTime = Date.now();
     _watchLastTick  = Date.now();
-    /* Every 5 seconds, fire a "watch" event with value=5 (seconds) */
     _watchInterval  = setInterval(function() {
       _watchLastTick = Date.now();
       trackEvent("watch", video, 5);
@@ -750,15 +1044,12 @@
     if (_watchInterval) {
       clearInterval(_watchInterval);
       _watchInterval = null;
-      /* Flush the partial seconds since the last 5-s tick */
       if (_watchVideo && _watchLastTick) {
         var partial = Math.floor((Date.now() - _watchLastTick) / 1000);
         if (partial > 0) { p = trackEvent("watch", _watchVideo, partial) || Promise.resolve(); }
       }
     }
-    _watchVideo     = null;
-    _watchStartTime = null;
-    _watchLastTick  = null;
+    _watchVideo = null; _watchStartTime = null; _watchLastTick = null;
     return p;
   }
 
@@ -771,72 +1062,39 @@
     } catch(e) {}
   };
 
-  /* ── Save video click to localStorage (survives checkout domain hop) ── */
-  /* Called when user clicks Shop Now / Buy Now button */
   window.nqSaveClickForAttribution = function(videoId, shopDomain) {
     try {
-      localStorage.setItem("nq_last_click", JSON.stringify({
-        id:   videoId,
-        shop: shopDomain,
-        ts:   Date.now()
-      }));
+      localStorage.setItem("nq_last_click", JSON.stringify({ id: videoId, shop: shopDomain, ts: Date.now() }));
     } catch(e) {}
   };
 
-  /* ── Order attribution on thank-you / order-status page ── */
-  /* Shopify renders the widget on /thank_you and /orders/* pages too.
-     We read localStorage (works across checkout.shopify.com redirect)
-     and fire the order event with the real order total from Shopify globals. */
   (function() {
     try {
       var path = window.location.pathname;
-      var isOrderPage = path.indexOf("/thank_you") >= 0 ||
-                        path.indexOf("/orders/")   >= 0;
-      /* Also fires on pages where Shopify.Checkout object is present */
-      var hasCheckout = typeof Shopify !== "undefined" &&
-                        typeof Shopify.checkout !== "undefined";
+      var isOrderPage = path.indexOf("/thank_you") >= 0 || path.indexOf("/orders/") >= 0;
+      var hasCheckout = typeof Shopify !== "undefined" && typeof Shopify.checkout !== "undefined";
       if (!isOrderPage && !hasCheckout) return;
-
-      /* Read from localStorage — survives checkout domain change */
       var stored = null;
       try { stored = localStorage.getItem("nq_last_click"); } catch(e) {}
       if (!stored) return;
-
       var last = JSON.parse(stored);
-      /* 60-minute attribution window */
-      if (Date.now() - last.ts > 60 * 60 * 1000) {
-        try { localStorage.removeItem("nq_last_click"); } catch(e) {}
-        return;
-      }
-
-      /* Get real order value — try multiple Shopify globals */
+      if (Date.now() - last.ts > 60 * 60 * 1000) { try { localStorage.removeItem("nq_last_click"); } catch(e) {} return; }
       var orderValue = 0;
       try {
         if (window.Shopify && Shopify.checkout && Shopify.checkout.total_price) {
-          /* total_price is in cents on some versions */
           var raw = parseFloat(Shopify.checkout.total_price);
           orderValue = raw > 1000 ? raw / 100 : raw;
         } else if (window.ShopifyAnalytics && ShopifyAnalytics.meta && ShopifyAnalytics.meta.checkout) {
           orderValue = parseFloat(ShopifyAnalytics.meta.checkout.total_price || 0);
         }
       } catch(e) {}
-
-      fetch(TRACK + "?video_id=" + encodeURIComponent(last.id) +
-                   "&shop="     + encodeURIComponent(last.shop) +
-                   "&event=order" +
-                   "&value="    + orderValue,
-            { method: "GET", keepalive: true }).catch(function(){});
-
-      /* Clear so same order isn't double-counted */
+      fetch(TRACK + "?video_id=" + encodeURIComponent(last.id) + "&shop=" + encodeURIComponent(last.shop) + "&event=order&value=" + orderValue, { method: "GET", keepalive: true }).catch(function(){});
       try { localStorage.removeItem("nq_last_click"); } catch(e) {}
     } catch(e) {}
   })();
 
-  /* ── Hidden preload video element for popup next-video buffering ── */
   var _preloadVid = document.createElement("video");
-  _preloadVid.muted       = true;
-  _preloadVid.preload     = "auto";
-  _preloadVid.style.display = "none";
+  _preloadVid.muted = true; _preloadVid.preload = "auto"; _preloadVid.style.display = "none";
   document.body.appendChild(_preloadVid);
 
   function preloadNextPopupVideo() {
@@ -848,26 +1106,14 @@
   }
 
   function showPopup(bid) {
-    /* Always flush the previous video's watch time before starting the next */
     stopWatchTracking();
-
     var video = allVideos[currentIndex];
     var vid   = document.getElementById("nq-popup-video-" + bid);
-
-    /* If the hidden preloader already buffered this video, swap its source object */
-    if (_preloadVid.src === video.r2_url && _preloadVid.readyState >= 2) {
-      /* Clone buffered data by pointing popup video at same src — browser cache handles the rest */
-      vid.src = video.r2_url;
-    } else {
-      vid.src = video.r2_url;
-    }
+    vid.src = video.r2_url;
     vid.play();
     trackView(video);
     startWatchTracking(video);
-
-    /* Start buffering the next video in the background */
     setTimeout(preloadNextPopupVideo, 500);
-
     var pd = document.getElementById("nq-popup-product-" + bid);
     pd.innerHTML = "";
     if ((video.product_ids && video.product_ids.length) || (video.product_handle && video.product_handle.length)) {
@@ -876,22 +1122,18 @@
   }
 
   function renderPopupProduct(pd, p, video) {
-    if (!p) { console.log("[NQ] fetchProduct returned null"); return; }
-
+    if (!p) return;
     var priceHtml   = '&#8377;' + fmt(p.price);
     var compareHtml = '';
     if (p.compare_at_price && p.compare_at_price > p.price) {
       compareHtml = '<span class="nq-popup-orig-price">&#8377;' + fmt(p.compare_at_price) + '</span>';
     }
     var videoId = video ? video.id : '';
-
-    /* Build product card HTML */
     var card = document.createElement("div");
     card.className = "nq-popup-product-card";
     if (p.image) {
       var thumb = document.createElement("img");
-      thumb.src = p.image;
-      thumb.className = "nq-popup-thumb";
+      thumb.src = p.image; thumb.className = "nq-popup-thumb";
       card.appendChild(thumb);
     }
     var info = document.createElement("div");
@@ -901,67 +1143,44 @@
     card.appendChild(info);
     pd.appendChild(card);
 
-    /* Build SHOP NOW button and attach listener directly — no setTimeout race */
     var shopBtn = document.createElement("a");
-    shopBtn.href      = "#";
-    shopBtn.className = "nq-popup-shop-btn";
-    shopBtn.style.background = btnColor;
-    shopBtn.textContent = "SHOP NOW";
-
+    shopBtn.href = "#"; shopBtn.className = "nq-popup-shop-btn";
+    shopBtn.style.background = btnColor; shopBtn.textContent = "SHOP NOW";
     shopBtn.addEventListener("click", function(e) {
       e.preventDefault();
-      if (shopBtn._nqClicking) return; // prevent double-fire
+      if (shopBtn._nqClicking) return;
       shopBtn._nqClicking = true;
-
-      /* 1. Flush remaining watch seconds for this video */
       stopWatchTracking();
-
-      /* 2. Fire click event — same GET fetch that view tracking uses (proven to work) */
       var clickPromise;
       try {
-        /* Save to localStorage so it survives checkout domain hop (checkout.shopify.com) */
         nqSaveClickForAttribution(videoId, shop);
-        /* Also keep sessionStorage for same-domain fallback */
         try { sessionStorage.setItem("nq_last_video", JSON.stringify({ id: videoId, shop: shop, ts: Date.now() })); } catch(e2) {}
         clickPromise = trackEvent("click", video);
-      } catch(err) {
-        clickPromise = Promise.resolve();
-      }
-
-      /* 3. Wait up to 500ms for the click request to complete, then navigate.
-            500ms is enough for a fast connection; keepalive ensures it even if we navigate early. */
+      } catch(err) { clickPromise = Promise.resolve(); }
       var handle = p.handle;
       var done = false;
-      function go() {
-        if (done) return;
-        done = true;
-        window.location.href = "/products/" + handle;
-      }
+      function go() { if (done) return; done = true; window.location.href = "/products/" + handle; }
       clickPromise.then(go).catch(go);
       setTimeout(go, 500);
     });
-
     pd.appendChild(shopBtn);
   }
-
 
   init();
 
 })();
 </script>
 
-<!-- NQ Keep-Warm: warms Vercel + pre-populates cache -->
+<!-- NQ Keep-Warm -->
 <script>
 (function() {
   if (window._nqWarmInit) return;
   window._nqWarmInit = true;
-
   var API  = "https://queuniverse-shoppable.vercel.app/api/videos";
   var shop = "{{ shop.permanent_domain }}";
   var url  = API + "?shop=" + shop;
   var KEY  = "nq_v6_" + shop + "_home";
   var TTL  = 10 * 60 * 1000;
-
   function ping() {
     fetch(url, { keepalive: true })
       .then(function(r) { return r.json(); })
@@ -969,28 +1188,14 @@
         if (!data || !data.videos || !data.videos.length) return;
         try {
           var raw = localStorage.getItem(KEY);
-          // Write cache if missing OR if older than TTL
           var shouldWrite = !raw;
-          if (!shouldWrite) {
-            var obj = JSON.parse(raw);
-            if (Date.now() - obj.ts > TTL) shouldWrite = true;
-          }
-          if (shouldWrite) {
-            localStorage.setItem(KEY, JSON.stringify({ ts: Date.now(), data: data }));
-            console.log("[NQ Keep-warm] Cache updated:", data.videos.length, "videos");
-          }
-          /* Preload the first video from R2 so it is in browser cache on page load */
+          if (!shouldWrite) { var obj = JSON.parse(raw); if (Date.now() - obj.ts > TTL) shouldWrite = true; }
+          if (shouldWrite) localStorage.setItem(KEY, JSON.stringify({ ts: Date.now(), data: data }));
           try {
             var firstVid = data.videos[0];
             if (firstVid && firstVid.r2_url) {
               var vLink = document.querySelector('link[data-nq-keepwarm="1"]');
-              if (!vLink) {
-                vLink = document.createElement("link");
-                vLink.rel = "preload";
-                vLink.as  = "video";
-                vLink.setAttribute("data-nq-keepwarm", "1");
-                document.head.appendChild(vLink);
-              }
+              if (!vLink) { vLink = document.createElement("link"); vLink.rel = "preload"; vLink.as = "video"; vLink.setAttribute("data-nq-keepwarm","1"); document.head.appendChild(vLink); }
               vLink.href = firstVid.r2_url;
             }
           } catch(e) {}
@@ -998,12 +1203,9 @@
       })
       .catch(function() { setTimeout(ping, 20000); });
   }
-
   ping();
   setInterval(ping, 4 * 60 * 1000);
-  document.addEventListener("visibilitychange", function() {
-    if (document.visibilityState === "visible") ping();
-  });
+  document.addEventListener("visibilitychange", function() { if (document.visibilityState === "visible") ping(); });
 })();
 </script>
 
@@ -1020,9 +1222,22 @@
     { "type": "range", "id": "card_height",           "label": "Video Card Height (px)",           "min": 200, "max": 600, "step": 20, "default": 340 },
     { "type": "range", "id": "card_width",            "label": "Video Card Width (px)",            "min": 120, "max": 400, "step": 10, "default": 200 },
     {
+      "type": "select",
+      "id": "show_on_device",
+      "label": "Show On Device",
+      "info": "Control which devices this carousel section appears on",
+      "options": [
+        { "value": "all",          "label": "All Devices" },
+        { "value": "desktop_only", "label": "Desktop Only" },
+        { "value": "mobile_only",  "label": "Mobile Only" }
+      ],
+      "default": "all"
+    },
+    {
       "type": "select", "id": "tile_type", "label": "Tile Type",
       "info": "'2 tiles' and '3 tiles' refer to the layout in mobile view",
       "options": [
+        { "value": "hero_slide",                     "label": "Video Card-Hero Featured + Side Slide" },
         { "value": "img_transparent_text_overlay_3", "label": "Video Card-Img & Transparent Text Overlay-3 tiles" },
         { "value": "img_transparent_text_overlay_2", "label": "Video Card-Img & Transparent Text Overlay-2 tiles" },
         { "value": "img_opaque_text_overlay_3",      "label": "Video Card-Img & Opaque Text Overlay-3 tiles" },
